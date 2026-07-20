@@ -1,0 +1,112 @@
+Classes
+---
+
+CONFIG LAYER (implemented)
+---
+com.holybuckets.villageecon.config
+
+VillageEconConfig            @Config(toml) - devMode, villageEconomyConfig path, DefaultEconomyConfigs
+                             (growthFactor, demandDampeningFactor, globalInterestRate, start levels,
+                             assignedLuxuryResourceCount, cycleLengthDays, markup) + static ConfigNumber
+                             validation bounds (DEF_*). Registered in CommonClass.
+
+ModConfig                    Singleton loader (CLASS_ID 011). init(EventRegistrar) hooks
+                             onBeforeServerStarted (High) / onServerStopped (Low). Loads JSON via
+                             HBUtil.FileIO.loadJsonConfigs, falls back to buildDefaultConfig() on parse
+                             failure, hydrates items/tags, prunes invalid resources, warns on unknown
+                             modifier references, validates luxury pool. Accessors: getResource(id),
+                             getResources(type), getPersonalitiesForBiome, getLuxuriesForBiome,
+                             static getBalmConfig()/getDefaults().
+
+VillageEconomyJsonConfig     IStringSerializable root JSON model (CLASS_ID 010). Scalars + ordered maps
+                             of staples/basics/luxuries, personalityModifiers, cycleModifiers.
+                             Guarantees a 'none' cycle modifier exists.
+
+config.model.EconomyResource     (007) type STAPLE|BASIC|LUXURY, item + optional useTags (#tag),
+                                 production[]/consumption[] level-indexed (Rho), weight, biome white/black
+                                 lists. hydrate() resolves Item/TagKey at server start; matches(ItemStack).
+config.model.VillagePersonality  (008) id, markup, interestModifier, resourceDemandModifiers,
+                                 resourceProductionModifiers (default 1), biome lists. Max 1 per village,
+                                 permanent.
+config.model.CycleModifier       (009) id, displayName, weight, demand/production modifiers. One drawn
+                                 per village per cycle. ADDITIVE with personality:
+                                 effective b = personality + (cycle - 1); neutral value is 1.
+
+
+ECONOMY LAYER (planned) - supply/demand math + inter-village trades
+---
+com.holybuckets.villageecon.economy
+
+Symbols (see sample/math.txt): L level, Rho base production, V village count, T resources traded,
+C reserve currency, I interest, S supply, B favoribility (0..2), D market rate/demand,
+Q quota fractions, Z demand dampening, R growth reward.
+
+VillageEconomyManager   (013) Singleton per server, mirrors ModConfig lifecycle.
+    - Owns Map<VillageId, VillageEconomy>; discovers/registers villages (V = size()).
+    - Daily tick: production pass then accrueInterest() on every village; detects cycle
+      boundary every cycleLengthDays (16) in-game days.
+    - Cycle end sequence: 1) each village computes quota results and profit,
+      2) MarketState recomputes global demand D, 3) TradeEngine matches + executes trades,
+      4) growth rewards R paid for floored quotas, 5) new CycleModifier drawn per village
+      (weighted, from ModConfig), 6) persist state.
+    - Persistence via foundation DataStore / SavedData; each VillageEconomy serializes itself.
+    - On village discovery: assign personality (uniform among biome-eligible, chance of none)
+      and assignedLuxuryResourceCount luxuries (weighted draw among biome-eligible).
+
+VillageEconomy          (014) Per-village state and math inputs for row i.
+    - villageId, level L, currency C, personalityId, luxuryIds, currentCycleModifierId.
+    - Map<String, ResourceLedger> ledgers: one per active resource (staples always;
+      basics at L >= basicResourceStartLevel; luxuries at L >= luxuryResourceStartLevel).
+    - favoribility(j):  clamp( personality.demand(j) + cycle.demand(j) - 1, 0, 2 )      -> b_j
+    - productionMod(j): personality.production(j) + cycle.production(j) - 1
+    - dailyProduce(j):  Rho = resource.productionAt(L) * productionMod(j) added to supply
+    - quotaFraction(j): q_j = s_j / (2 * rho_{j, L+1})                                  (Q)
+    - interestRate():   globalInterestRate * personality.interestModifier               (I)
+    - accrueInterest(): C += C * (interestRate - 1) daily
+    - profit(j):        P_j = C*I + (1 - z*q_j)*(s*b*D)_j + floor(q_j)*r_j
+    - playerPrice(j):   D_j * personality.markup  (village sells to player)
+
+ResourceLedger          (015) Per-resource per-village bookkeeping.
+    - supply s_j (stacks), producedThisCycle, consumedThisCycle, tradedThisCycle.
+    - Kept separate from VillageEconomy so serialization and per-cycle reset are trivial.
+
+MarketState             (016) Global market aggregates, recomputed each cycle (and on demand).
+    - T = average count of resources traded per village.
+    - growthReward(i,j): R_ij = sum(C over all villages) * growthFactor / (V * T)
+    - baseDemand(j):     Do_j = r_ij / q   (reward per unit of unmet quota)
+    - demand(i,j):       d_ij = dC*I + (1 - z*q_j)*(dS*b*D) + dS * r/q
+                         marginal value village i places on one more unit of j:
+                         interest delta + market value delta + average (non-floored)
+                         quota bonus per unit.
+    - marketRate(j):     D_j from aggregate demand vs aggregate supply across villages,
+                         normalized so staples with met quotas trend to base value.
+
+EconomyMath             (017) Stateless static functions implementing every formula above
+                        (quotaFraction, profit, marginalDemand, growthReward, marketRate).
+                        No Minecraft imports -> unit-testable with plain JUnit against
+                        hand-computed examples from sample/math.txt.
+
+TradeEngine             (018) Cycle-end inter-village trade matching + execution.
+    - For each resource j: sellers = villages with q_j > 1 (surplus above quota),
+      buyers = villages ranked by marginal demand d_ij.
+    - Greedy matcher: repeatedly move the unit (or stack) with the largest positive
+      (d_buyer - d_seller) spread until no positive spread remains; price = midpoint
+      clamped to marketRate D_j.
+    - Executes: supply transfer between ledgers, currency settlement, TradeRecord log.
+    - Deterministic given a seeded Random -> reproducible cycles for tests.
+
+TradeRecord / TradeOrder (019) Immutable records: cycleIndex, sellerId, buyerId, resourceId,
+                        quantity, unitPrice. Serialized for history/debug commands.
+
+INTEGRATION POINTS
+---
+- CommandList: /hbve info <village>, /hbve market, /hbve forceCycle (devMode).
+- Player trading UI later reads playerPrice(j) and matches(ItemStack) for exchange items.
+- Notifications: cycle modifier displayName announced to nearby players at cycle start.
+
+ORDERING / LIFECYCLE
+---
+CommonClass.init -> registerConfig(VillageEconConfig)
+VillageEconomyMain.init -> ModConfig.init(registrar) [config load, priority High]
+                        -> VillageEconomyManager.init(registrar) [after config, priority Normal]
+onServerStopped -> both singletons reset (INSTANCE = null).

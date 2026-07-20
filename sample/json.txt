@@ -1,0 +1,95 @@
+
+
+
+{
+"growthFactor": 2 // at least 1, less than 10
+"demandDampeningFactor": 2, //rate at which demand fall off when village needs are met
+"globalInterestRate": 1.1, // base interest rate for all villages, before modifiers
+
+"resources": {
+"basicResourceStartLevel: 5,
+"LuxuryResourceStartLevel: 8,
+"assignedLuxuryResourceCount": 2,
+"staples": [ //resources villages buy and sell at all levels
+{
+"item": "oak_log", //item used for exchange
+"useTags": "#log", //accept any items matching this tag as valid item for exchange
+"production": [16, 16, 16, 24, 32, 48, 80, 160, 320...],
+"consumption": [...]
+},
+{
+"item": "bread", //item used for exchange
+
+
+}
+],
+"basics": [ // basic resources are only produced by the village at level 5 and up
+{
+"item": "iron", //item used for exchange
+... // Similar attributes to previous sections 
+
+}
+],
+"luxuries": [ // luxury resources are only produced by the village at level 8 and up, each village may have different luxury resources so a weight is included to help choose the luxuries as well as biom blacklist and whitelists
+{
+"item": "gold", //item used for exchange
+... // Similar attributes to previous sections 
+"weight": 20, //weight against total pool that this particular luxury is chosen for this village
+"biomeWhiteList": [ "desert", "badlands" ]
+},
+{
+"item": "boquet", //item used for exchange
+... // Similar attributes to previous sections 
+"weight": 10, //weight against total pool that this particular luxury is chosen for this village
+"biomeBlackList": [ "desert", "badlands", "snowy_peaks", "taiga"]
+}
+]
+
+
+},  // End resources section
+
+"personalityModifiers": [ //a maximum of 1 is assigned to a single village and is permanent
+{
+"id": "greedy", // id is never renderered in game
+"markup": 2, //markup rate when village sells goods to player
+"interestModifier": 1.5,  // 50% more than everyone else's rate
+"resourceDemandModifiers": [  //how much this personality values different resources on the market, all defaulted to 1
+"iron" : 1,
+"gold": 1.2
+],
+"resourceProductionModifiers": [
+"iron": 0.5 // this village isn't very good at producing things
+]
+
+},
+{
+"id": "likes_wood", // id is never renderered in game
+"markup": 1, //markup rate when village sells goods to player
+"resourceDemandModifiers": [
+"oak_log":  1.5
+],
+"resourceProductionModifiers": [
+"oak_log":  2 //
+],
+"biomeWhiteList": [ "forest", "cherry_grove", "birch_forest" ]
+}
+
+
+], //end personalities
+"cycleModifiers": [ //1 of these is assigned to each village each cycle which further modifies the villages production and demand. These modifiers are additive with personality, not multiplicative. Be sure to include the "none" modifier so villages aren't always afflicted with something
+{
+"id": "none", // no modifiers applied
+"weight": 50, 
+},
+{
+"id": "drought",
+"displayName": "A Drought",
+"resourceProductionModifiers": [
+"bread":  0.5 //bread yields reduced by half
+]
+}
+
+] //End cycleModifiers
+
+
+} // End config

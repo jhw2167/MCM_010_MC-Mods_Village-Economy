@@ -1,0 +1,35 @@
+Base Math
+
+Each village calculates profit over a 16 day cycle. Interest accrues daily. each 16 days villages are awarded additional currency if they exceed their quota Q
+
+L - village level, used when indexing
+Rho - village base production, indexed by level L and resource J, Each village has the same base production which is tabulated in JSON configs. It is passed through modifiers when used in game.
+V - total number of villages discovered so far
+T - Total number of resources each village is trading (typically they start with 1 or 2 then start producing more as time goes on)
+
+i = village index, j = resource index
+
+Objective Function: CI + (1-ZQ) (SBD) + QR
+
+C - total reserve currency of the village
+I - Interest earned off of reserve currency
+S - supply matrix, integer supply in stacks of items of all items produced buy the village, iterated j = 1…N s.t. s_1 = 6 stacks of wood, s_2 = 2 stacks of iron etc.
+B - favoribility matrix - 1xN matrix of how much each village favors each item, decimal value between 0 and 2
+D - market rate or demand for each item
+
+Q - fraction of resource quota reached. 1xN matrix where q_j is fraction of quota for resource j reached. For some resource j, q_j = s_j / 2*rho_j, L+1.
+Z - configurable demand dampening factor, indexed by resource and level
+R - Economic growth factor. Bonus reward granted to each village per each cycle they meet the quota. To determine R_ij = SUM(C)*(EconomicGrowthFactor) / V*T -
+
+Do_j = r_ij/q - base demand
+
+Profit of a particular resource during a particular cycle. We floor the quota ratio so bonuses are only given if the merchant maxes it out.
+
+Pj = CI + (1-zqj)(sbD)j + ⌊qj⌋*rj
+
+Demand for a particular resource is a function of the profit Available
+
+
+To determine demand account for the loss or gain in interest after the trade, the loss in material value of product at the market rate and the loss in potential quota bonuses. To consider quota bonuses, take the average per unit instead of flooring.
+
+d_ij = del*(C)I + (1-zqj)(del*sbD) + del*s*r/q

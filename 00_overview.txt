@@ -1,0 +1,237 @@
+Overview
+---
+
+Technologies:
+Jetbrains Intelij 
+Forge 1.20.1 Mod Development Kit
+
+Mod Naming Convention:
+MCM_00#_HBs-Ore-Clusters-and-Regen
+
+Setup
+---
+
+1. Create a repo on github according to the mod naming convention above
+
+2. Clone repo into local repository
+
+3. Copy all files in the 00_Forge-1.20.1_TEMPLATE directory into your cloned empty directory
+	- Dont copy .git and .idea directories
+
+4. Bash into the directory, use ./gradlew to init the directory
+	- run ./gradlew tasks to view list of all gradle tasks you can run
+	- Call gradle on a particular subproject gradlew e.g. fabric:clean
+	- Call a specific group task e.g. forge:build
+
+5. To start Minecraft (by running a client or a Server) your options are:
+	- fabric:runClient
+	- forge:Client
+ 	- fabric:runServer
+
+6. Fill out your mod's basic information in gradle.properties
+	- Mod Name
+	- Mod ID
+	- Mod Version
+	- Mod 
+
+7. Clean directory and setup mixin files
+	- ./gradlew cleanIdea
+	- src/main/resources has two mixin files you must rename after your modId
+
+8. Setup your java code
+	- Determine you package names
+	- Assign the correct mod_id to your ForgeMain method
+	- mods.toml will throw error
+
+9. Add dependencies to your gradle
+	- some fundamental dependencies are included within the build.gradle
+
+
+
+Converting to 1.21 Fabric/Forge
+---
+
+	1A. Files to update:
+	- gradle.properties - minecraft version, add neoforge properties
+	- add credits=Holy_Buckets
+	- add foundation_version_min=
+
+# Common
+java_version=21
+minecraft_version=1.21.1
+minecraft_version_range=[1.21.1, 1.22)
+
+# NeoForge
+neoforge_version = 21.1.8
+neoforge_version_range = [21-beta,)
+neoforge_loader_version_range = [1,)
+neo_form_version = 1.21.1-20240808.144430
+parchment_minecraft = 1.21
+parchment_version = 2024.06.23
+
+# Fabric
+fabric_version = 0.116.11+1.21.1
+fabric_loader_version = 0.17.3
+loom_version=1.8-SNAPSHOT
+
+...
+
+balm_version=21.0.56+1.21.1
+balm_version_range=[21.0.56,)
+
+
+	1B. settings.gradle and gradle-wrapper.properties
+
+	- swap forge for neoforge
+	- include neoforge subproject, get rid of forge
+	- gradle-wrapper update gradle to 8.12
+	- ERROR: Issue telling me 'mod' was compiled with new version of loom (1.14) but I am using 1.8 then tells me 1.14 doesn't exist
+	=> upgrade to gradle 9.1.2, loom 1.14-SNAPSHOT
+
+
+	2. Rename folder to neoforge and swap neoforge build.gradle with orecluster
+		- neoforge can be copied almost verbatim - just add any new depedencies for the current mod and update the pid and fid in gradle.properties to their neoforge variant
+		- fabric/build.gradle - rename to hbs_foundation
+		- ERROR: 
+
+	2b. Refactor root build.gradle
+		- plugins at the top
+	plugins {
+    id 'fabric-loom' version "${loom_version}" apply(false)
+    id 'net.neoforged.moddev' version '2.0.49-beta' apply(false)
+}
+	- root build.gradle has hard coded call to java 17, update to java_version gradle property
+
+	2c. Replace common build.gradle with new version
+	- just overwrite with new file, carry over balm and foundations dependencies from oreCluster
+	- 
+
+	3. add buildSrc file from foundations or orecluster
+		- in buildsrc/src/main/groovy we find multiloader-common.gradle which will have some updates
+		- update expandProps to include all expanded props from root build.gradle in local file
+		- remove processResources from ROOT build.gradle, leave repos
+
+	4. Creating ResourceLocations has changed
+		- use LOC from HBUtil new ResourceLocation( -> HBUtil.LOC(
+
+	5. Block method "use" has been repurposed:
+		- useItemOn
+		- useWithoutItem
+		- Return ItemInteractionResult now
+
+	6. Networking changed. 
+		- All custom payloads must implement CustomPacketPayload
+		- All classes must return a Type defined by their resource location
+		- All classes must maintain a Codec object that will be passed to the registration layer
+
+	7. Serializing data now changed
+		- load -> loadAdditional
+		- save -> saveAdditional
+		- saveAdditional(CompoundTag tag => saveAdditional(CompoundTag tag, HolderLookup.Provider registries
+		- saveAdditional(tag, =>saveAdditional(tag, registries);
+		- => getUpdateTag(HolderLookup.Provider registries
+		- HolderLookup.Provider can just come from be.level.registryAccess()
+		- 
+
+	8. Copying block behavior properties
+		- .copy -> BlockBehaviour.Properties.ofFullCopy(
+		- 
+
+	9. Block Entities now must implement:
+		@Override
+	    protected MapCodec<? extends BaseEntityBlock> codec() {
+	       return null;
+	    }
+
+	--- Neoforge conversion
+	10. Commands:
+	update mod.json, platform and mixins file
+	copy forge to neo ->
+	replace instance of forge with neo -> 
+	./folderStreamEditRecurse.sh MCM_000_HBs-Foundation/neoforge/src/main/java/com/holybuckets/ minecraftneoforge neoforged
+
+
+	11. Balm Menus
+	- put any data from writeToBufOpening into OpendData
+	- Menu instance must define a StreamCodec now, see waystones C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\964_waystones\common\src\main\java\net\blay09\mods\waystones\menu\WaystoneEditMenu.java
+	- 
+	
+	12. BlockEntity onblockdestroyed
+		- returns BlockState now
+
+	13. Fix ForgeMain and ForgeClientMain
+		- ForgeClient must be initialized in the constructor of the class
+		- Both need to accept an IEventBus in the constructor:
+
+		   final var context = new NeoForgeLoadContext(modEventBus);
+	        Balm.initialize(Constants.MOD_ID, context, CommonClass::init);
+
+
+	
+	
+
+	# NeoForge
+neoforge_version = 21.1.8
+neoforge_version_range = [21-beta,)
+neoforge_loader_version_range = [1,)
+
+# Fabric
+fabric_version = 0.116.7+1.21.1
+fabric_loader_version = 0.17.3
+loom_version=1.7-SNAPSHOT
+
+
+4. Added Minecraft version range and java version, updated minecraft version:
+	minecraft_version_range=[1.21.1, 1.22)
+	minecraft_version=1.21.1
+	java_version=25
+
+5. Remove loom plugin from build.gradle
+
+6. Code Fixes (1.21)
+
+	- import net.minecraft.world.level.chunk.ChunkStatus; import net.minecraft.world.level.chunk.status.ChunkStatus;
+	- new ResourceLocation( , ResourceLocation.fromNamespaceAndPath(
+
+
+AI Instructions:
+
+HB_Fabric-1.21
+
+
+
+Appendix
+---
+
+
+#7 Dependency help
+---
+- compileOnly "dependency"
+	Purpose: The dependency is needed during compilation, but it is not included in 
+			the runtime environment because it is provided, like by Minecraft or forge
+
+- compileOnly fg.deobf("dependency")
+	fg.deobf is a Forge specific plugin that deobfuscates a jar according to minecraft mappings
+
+- runtimeOnly "dependency"
+	- Your mod may have "soft dependencies" on another mod, using reflection for example
+	- Good to clarify, not essential
+
+- runtimeOnly fg.deobf("dependency")
+
+
+Java 21
+---
+- Set your JDK to Java 21
+- set your Gradle compat to Java 21
+- Set your toolchain in gradle file to java 21
+- set mixin compat to java 21
+
+A number of errors occur
+
+	- error with the mixin compata of JAVA_21 not being supported
+
+	- [[Unsupported JNI version detected in LWJGL]] - crashes if attempting to debug
+
+	- mods.toml missing metadata for modid
+
