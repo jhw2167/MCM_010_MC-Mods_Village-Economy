@@ -38,6 +38,7 @@ public class VillageEconomyMain {
         //Events
         EventRegistrar registrar = EventRegistrar.getInstance();
         com.holybuckets.villageecon.config.ModConfig.init(registrar);
+        com.holybuckets.villageecon.core.VillageManager.init(registrar);
 
 
         //register local events

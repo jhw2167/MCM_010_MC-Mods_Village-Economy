@@ -1,7 +1,6 @@
 package com.holybuckets.villageecon.config.model;
 
 import com.google.gson.JsonObject;
-import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.VillageEconConfig;
 
@@ -37,7 +36,7 @@ public class CycleModifier {
     public CycleModifier(String id) {
         this.id = (id == null) ? "" : id.trim();
         this.displayName = this.id;
-        this.weight = VillageEconConfig.DEF_WEIGHT.get();
+        this.weight = VillageEconConfig.DEF_WEIGHT;
     }
 
     public CycleModifier(String id, String displayName, int weight) {
@@ -76,9 +75,13 @@ public class CycleModifier {
     //** Setters **//
 
     public void setWeight(Integer weight) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(weight,
-            VillageEconConfig.DEF_WEIGHT, "for cycle modifier: " + id);
-        if (validConfig) this.weight = weight;
+        if (weight == null || weight < 0) {
+            LoggerProject.logWarning(CLASS_ID + "004", "Invalid weight for cycle modifier: " + id
+                + ". Using default value of " + VillageEconConfig.DEF_WEIGHT);
+            this.weight = VillageEconConfig.DEF_WEIGHT;
+            return;
+        }
+        this.weight = weight;
     }
 
     public void putDemandModifier(String resourceId, Float value) {
@@ -90,13 +93,13 @@ public class CycleModifier {
     }
 
     private void putModifier(Map<String, Float> target, String resourceId, Float value, String property) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(value,
-            VillageEconConfig.DEF_RESOURCE_MODIFIER,
-            "in " + property + " for cycle modifier: " + id);
-        if (validConfig)
-            target.put(resourceId, value);
-        else
-            target.put(resourceId, VillageEconConfig.DEF_RESOURCE_MODIFIER.get());
+        if (value == null || value < 0) {
+            LoggerProject.logWarning(CLASS_ID + "005", "Invalid value in " + property + " for cycle modifier: " + id
+                + ". Using default value of " + VillageEconConfig.DEF_RESOURCE_MODIFIER);
+            target.put(resourceId, VillageEconConfig.DEF_RESOURCE_MODIFIER);
+            return;
+        }
+        target.put(resourceId, value);
     }
 
 

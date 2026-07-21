@@ -14,10 +14,7 @@ import java.util.*;
 
 /**
  * Class: VillageEconomyJsonConfig
- * Description: Parses and holds the full village economy configuration read from
- * the JSON config file (or the embedded default): global economy scalars, the
- * resource pools (staples, basics, luxuries), village personality modifiers
- * and cycle modifiers.
+ * Description:
  *
  * The chief purpose of this class is to support serializing and deserializing the
  * JSON configuration; values should be read from this object at runtime via ModConfig.
@@ -193,31 +190,22 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
     private void parseScalars(JsonObject root)
     {
         try {
-            if (root.has("growthFactor")) {
-                Float v = root.get("growthFactor").getAsFloat();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_GROWTH_FACTOR, "in economy config"))
-                    this.growthFactor = v;
-            }
+            if (root.has("growthFactor"))
+                this.growthFactor = root.get("growthFactor").getAsFloat();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "001", "Error parsing growthFactor. " + e.getMessage());
         }
 
         try {
-            if (root.has("demandDampeningFactor")) {
-                Float v = root.get("demandDampeningFactor").getAsFloat();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_DEMAND_DAMPENING_FACTOR, "in economy config"))
-                    this.demandDampeningFactor = v;
-            }
+            if (root.has("demandDampeningFactor"))
+                this.demandDampeningFactor = root.get("demandDampeningFactor").getAsFloat();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "002", "Error parsing demandDampeningFactor. " + e.getMessage());
         }
 
         try {
-            if (root.has("globalInterestRate")) {
-                Float v = root.get("globalInterestRate").getAsFloat();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_GLOBAL_INTEREST_RATE, "in economy config"))
-                    this.globalInterestRate = v;
-            }
+            if (root.has("globalInterestRate"))
+                this.globalInterestRate = root.get("globalInterestRate").getAsFloat();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "003", "Error parsing globalInterestRate. " + e.getMessage());
         }
@@ -232,31 +220,22 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         JsonObject resources = root.getAsJsonObject("resources");
 
         try {
-            if (resources.has("basicResourceStartLevel")) {
-                Integer v = resources.get("basicResourceStartLevel").getAsInt();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_BASIC_RESOURCE_START_LEVEL, "in resources section"))
-                    this.basicResourceStartLevel = v;
-            }
+            if (resources.has("basicResourceStartLevel"))
+                this.basicResourceStartLevel = resources.get("basicResourceStartLevel").getAsInt();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "005", "Error parsing basicResourceStartLevel. " + e.getMessage());
         }
 
         try {
-            if (resources.has("luxuryResourceStartLevel")) {
-                Integer v = resources.get("luxuryResourceStartLevel").getAsInt();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_LUXURY_RESOURCE_START_LEVEL, "in resources section"))
-                    this.luxuryResourceStartLevel = v;
-            }
+            if (resources.has("luxuryResourceStartLevel"))
+                this.luxuryResourceStartLevel = resources.get("luxuryResourceStartLevel").getAsInt();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "006", "Error parsing luxuryResourceStartLevel. " + e.getMessage());
         }
 
         try {
-            if (resources.has("assignedLuxuryResourceCount")) {
-                Integer v = resources.get("assignedLuxuryResourceCount").getAsInt();
-                if (HBUtil.Validator.validateNumber(v, VillageEconConfig.DEF_ASSIGNED_LUXURY_RESOURCE_COUNT, "in resources section"))
-                    this.assignedLuxuryResourceCount = v;
-            }
+            if (resources.has("assignedLuxuryResourceCount"))
+                this.assignedLuxuryResourceCount = resources.get("assignedLuxuryResourceCount").getAsInt();
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "007", "Error parsing assignedLuxuryResourceCount. " + e.getMessage());
         }

@@ -1,7 +1,6 @@
 package com.holybuckets.villageecon.config.model;
 
 import com.google.gson.JsonObject;
-import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.VillageEconConfig;
 import net.minecraft.resources.ResourceLocation;
@@ -38,8 +37,8 @@ public class VillagePersonality {
 
     public VillagePersonality(String id) {
         this.id = (id == null) ? "" : id.trim();
-        this.markup = VillageEconConfig.DEF_MARKUP.get();
-        this.interestModifier = VillageEconConfig.DEF_INTEREST_MODIFIER.get();
+        this.markup = VillageEconConfig.DEF_MARKUP;
+        this.interestModifier = VillageEconConfig.DEF_INTEREST_MODIFIER;
     }
 
     public VillagePersonality(String id, float markup, float interestModifier) {
@@ -86,15 +85,23 @@ public class VillagePersonality {
     //** Setters **//
 
     public void setMarkup(Float markup) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(markup,
-            VillageEconConfig.DEF_MARKUP, "for personality: " + id);
-        if (validConfig) this.markup = markup;
+        if (markup == null || markup < 0) {
+            LoggerProject.logWarning(CLASS_ID + "005", "Invalid markup for personality: " + id
+                + ". Using default value of " + VillageEconConfig.DEF_MARKUP);
+            this.markup = VillageEconConfig.DEF_MARKUP;
+            return;
+        }
+        this.markup = markup;
     }
 
     public void setInterestModifier(Float interestModifier) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(interestModifier,
-            VillageEconConfig.DEF_INTEREST_MODIFIER, "for personality: " + id);
-        if (validConfig) this.interestModifier = interestModifier;
+        if (interestModifier == null || interestModifier < 0) {
+            LoggerProject.logWarning(CLASS_ID + "006", "Invalid interestModifier for personality: " + id
+                + ". Using default value of " + VillageEconConfig.DEF_INTEREST_MODIFIER);
+            this.interestModifier = VillageEconConfig.DEF_INTEREST_MODIFIER;
+            return;
+        }
+        this.interestModifier = interestModifier;
     }
 
     public void putDemandModifier(String resourceId, Float value) {
@@ -106,13 +113,13 @@ public class VillagePersonality {
     }
 
     private void putModifier(Map<String, Float> target, String resourceId, Float value, String property) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(value,
-            VillageEconConfig.DEF_RESOURCE_MODIFIER,
-            "in " + property + " for personality: " + id);
-        if (validConfig)
-            target.put(resourceId, value);
-        else
-            target.put(resourceId, VillageEconConfig.DEF_RESOURCE_MODIFIER.get());
+        if (value == null || value < 0) {
+            LoggerProject.logWarning(CLASS_ID + "007", "Invalid value in " + property + " for personality: " + id
+                + ". Using default value of " + VillageEconConfig.DEF_RESOURCE_MODIFIER);
+            target.put(resourceId, VillageEconConfig.DEF_RESOURCE_MODIFIER);
+            return;
+        }
+        target.put(resourceId, value);
     }
 
 

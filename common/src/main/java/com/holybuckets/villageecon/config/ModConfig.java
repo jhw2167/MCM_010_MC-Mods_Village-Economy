@@ -31,6 +31,7 @@ public class ModConfig {
     private static ModConfig INSTANCE;
 
     private VillageEconomyJsonConfig economyConfig;
+    private final Set<ResourceLocation> villageStructures = new HashSet<>();
 
     public static ModConfig getInstance() {
         if (INSTANCE == null) {
@@ -102,6 +103,16 @@ public class ModConfig {
             .filter(r -> r.allowsBiome(biome)).toList();
     }
 
+    /** Structures treated as villages and assigned a VillageEconomy on load **/
+    public Set<ResourceLocation> getVillageStructures() {
+        return Collections.unmodifiableSet(villageStructures);
+    }
+
+    public boolean isVillageStructure(ResourceLocation structureLoc) {
+        if (structureLoc == null) return false;
+        return villageStructures.contains(structureLoc);
+    }
+
 
     //** Loading and hydration **//
 
@@ -136,6 +147,7 @@ public class ModConfig {
         hydrateResources();
         validateModifierReferences();
         validateLuxuryPool();
+        loadVillageStructures(activeConfig);
 
         LoggerProject.logInfo(CLASS_ID + "002",
             "Village economy config loaded: " + economyConfig.getAllResources().size() + " resource(s), "
@@ -191,6 +203,20 @@ public class ModConfig {
             LoggerProject.logWarning(CLASS_ID + "005",
                 "assignedLuxuryResourceCount (" + assigned + ") exceeds the luxury pool size ("
                 + poolSize + "); villages will be assigned at most " + poolSize + " luxuries");
+        }
+    }
+
+    /** Parse the configured village structure ids into resource locations **/
+    private void loadVillageStructures(VillageEconConfig activeConfig)
+    {
+        villageStructures.clear();
+        for (String structId : activeConfig.villageStructures) {
+            try {
+                villageStructures.add(new ResourceLocation(structId));
+            } catch (Exception e) {
+                LoggerProject.logWarning(CLASS_ID + "006",
+                    "Invalid village structure id in config: '" + structId + "'. " + e.getMessage());
+            }
         }
     }
 

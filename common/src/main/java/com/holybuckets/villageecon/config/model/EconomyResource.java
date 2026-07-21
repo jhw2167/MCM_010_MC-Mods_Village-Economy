@@ -59,7 +59,7 @@ public class EconomyResource {
         this.itemIdRaw = (itemIdRaw == null) ? "" : itemIdRaw.trim();
         this.production = new ArrayList<>(DEF_PRODUCTION);
         this.consumption = new ArrayList<>(DEF_CONSUMPTION);
-        this.weight = VillageEconConfig.DEF_WEIGHT.get();
+        this.weight = VillageEconConfig.DEF_WEIGHT;
     }
 
     public EconomyResource(ResourceType type, String itemIdRaw, List<Integer> production, List<Integer> consumption) {
@@ -112,9 +112,13 @@ public class EconomyResource {
     public void setUseTagsRaw(String useTagsRaw) { this.useTagsRaw = useTagsRaw; }
 
     public void setWeight(Integer weight) {
-        Boolean validConfig = HBUtil.Validator.validateNumber(weight,
-            VillageEconConfig.DEF_WEIGHT, "for resource: " + itemIdRaw);
-        if (validConfig) this.weight = weight;
+        if (weight == null || weight < 0) {
+            LoggerProject.logWarning(CLASS_ID + "009", "Invalid weight for resource: " + itemIdRaw
+                + ". Using default value of " + VillageEconConfig.DEF_WEIGHT);
+            this.weight = VillageEconConfig.DEF_WEIGHT;
+            return;
+        }
+        this.weight = weight;
     }
 
 
