@@ -1,19 +1,27 @@
 package com.holybuckets.villageecon.core;
 
+import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.villageecon.config.ModConfig;
+import com.holybuckets.villageecon.config.model.EconomyResource;
+import com.holybuckets.villageecon.core.trade.Bazaar;
+
 /**
  * Class: MarketState
- * Description: PLACEHOLDER. Global market aggregates across all villages, recomputed
- * each cycle (and on demand). Will provide the market rate D per resource, total
- * currency in circulation, and V / T counts for growth reward computation.
+ * Description: Facade over the Bazaar for global market aggregates. Market rates come
+ * from each Market's volume-weighted moving average of the last N trades.
+ * totalCurrency / V / T counts for growth reward computation remain TODO.
  */
 public class MarketState {
 
     public static final String CLASS_ID = "016";
 
-    /** Market rate D_j for the given resource. TODO: derive from aggregate supply and demand **/
+    /** Market rate D_j for the given resource, from the overworld Bazaar's moving average **/
     public static float marketRate(String resourceId) {
-        //TODO
-        return 1f;
+        Bazaar bazaar = Bazaar.get(GeneralConfig.OVERWORLD);
+        if (bazaar == null) return 1f;
+        EconomyResource resource = ModConfig.getInstance().getResource(resourceId);
+        if (resource == null || resource.getItem() == null) return 1f;
+        return bazaar.getMarketRate(resource.getItem());
     }
 
     /** SUM(C) - total reserve currency across all villages. TODO **/

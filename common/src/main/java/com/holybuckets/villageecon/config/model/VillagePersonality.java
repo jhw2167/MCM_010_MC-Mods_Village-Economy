@@ -27,6 +27,7 @@ public class VillagePersonality {
     private final String id;                //id is never rendered in game
     private float markup;                   //markup rate when village sells goods to player
     private float interestModifier;         //multiplier on the global interest rate
+    private float agreeableness;            //0..1 haggling disposition: 1 accepts any profitable trade, 0 demands full expected profit
     private final Map<String, Float> resourceDemandModifiers = new LinkedHashMap<>();
     private final Map<String, Float> resourceProductionModifiers = new LinkedHashMap<>();
     private final Set<ResourceLocation> biomeWhiteList = new HashSet<>();
@@ -39,6 +40,7 @@ public class VillagePersonality {
         this.id = (id == null) ? "" : id.trim();
         this.markup = VillageEconConfig.DEF_MARKUP;
         this.interestModifier = VillageEconConfig.DEF_INTEREST_MODIFIER;
+        this.agreeableness = VillageEconConfig.DEF_AGREEABLENESS;
     }
 
     public VillagePersonality(String id, float markup, float interestModifier) {
@@ -55,6 +57,8 @@ public class VillagePersonality {
     public float getMarkup() { return markup; }
 
     public float getInterestModifier() { return interestModifier; }
+
+    public float getAgreeableness() { return agreeableness; }
 
     /** How much this personality values the given resource on the market; defaults to 1 **/
     public float getDemandModifier(String resourceId) {
@@ -104,6 +108,16 @@ public class VillagePersonality {
         this.interestModifier = interestModifier;
     }
 
+    public void setAgreeableness(Float agreeableness) {
+        if (agreeableness == null || agreeableness < 0 || agreeableness > 1) {
+            LoggerProject.logWarning(CLASS_ID + "008", "Invalid agreeableness for personality: " + id
+                + ". Must be between 0 and 1. Using default value of " + VillageEconConfig.DEF_AGREEABLENESS);
+            this.agreeableness = VillageEconConfig.DEF_AGREEABLENESS;
+            return;
+        }
+        this.agreeableness = agreeableness;
+    }
+
     public void putDemandModifier(String resourceId, Float value) {
         putModifier(resourceDemandModifiers, resourceId, value, "resourceDemandModifiers");
     }
@@ -131,6 +145,7 @@ public class VillagePersonality {
         obj.addProperty("id", id);
         obj.addProperty("markup", markup);
         obj.addProperty("interestModifier", interestModifier);
+        obj.addProperty("agreeableness", agreeableness);
 
         obj.add("resourceDemandModifiers", serializeModifierMap(resourceDemandModifiers));
         obj.add("resourceProductionModifiers", serializeModifierMap(resourceProductionModifiers));
@@ -176,6 +191,13 @@ public class VillagePersonality {
                 personality.setInterestModifier(obj.get("interestModifier").getAsFloat());
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "003", "Error parsing interestModifier for personality: " + id + ". " + e.getMessage());
+        }
+
+        try {
+            if (obj.has("agreeableness"))
+                personality.setAgreeableness(obj.get("agreeableness").getAsFloat());
+        } catch (Exception e) {
+            LoggerProject.logError(CLASS_ID + "009", "Error parsing agreeableness for personality: " + id + ". " + e.getMessage());
         }
 
         deserializeModifierMap(obj, "resourceDemandModifiers", personality::putDemandModifier, id);

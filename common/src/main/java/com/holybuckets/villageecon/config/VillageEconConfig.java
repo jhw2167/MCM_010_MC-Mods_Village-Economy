@@ -37,6 +37,7 @@ public class VillageEconConfig {
     public static final float DEF_INTEREST_MODIFIER = 1f;
     public static final float DEF_RESOURCE_MODIFIER = 1f;
     public static final int DEF_WEIGHT = 10;
+    public static final float DEF_AGREEABLENESS = 0.5f;
 
 
     //** CONFIG FIELDS **//
@@ -85,4 +86,21 @@ public class VillageEconConfig {
     }
 
     public DefaultEconomyConfigs defaultEconomyConfigs = new DefaultEconomyConfigs();
+
+    public static class TradeConfigs {
+
+        @Comment("N - number of most recent trades used in the volume-weighted moving average that sets each resource's market rate")
+        public int marketRateTradeWindow = 16;
+
+        @Comment("Small random chance (0 to 1) that a matched trade simply doesn't occur during haggling")
+        public float tradeFallthroughChance = 0.05f;
+
+        @Comment("Standard deviation of the normal distribution used to roll a village's agreeableness each trade tick, centered on its personality's agreeableness")
+        public float agreeablenessStdDev = 0.15f;
+
+        @Comment("Chunk radius per village level in which a buying village can reach sellers: radius = villageLevel * this value")
+        public int buyRadiusPerLevelChunks = 32;
+    }
+
+    public TradeConfigs tradeConfigs = new TradeConfigs();
 }

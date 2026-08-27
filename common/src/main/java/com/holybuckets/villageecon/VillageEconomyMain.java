@@ -2,7 +2,10 @@ package com.holybuckets.villageecon;
 
 
 import com.holybuckets.foundation.event.EventRegistrar;
+import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.VillageEconConfig;
+import com.holybuckets.villageecon.core.VillageManager;
+import com.holybuckets.villageecon.core.trade.Bazaar;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
@@ -27,18 +30,11 @@ public class VillageEconomyMain {
     private void init()
     {
 
-        /*
-        Proxy for external APIs which are platform dependent
-        this.portalApi = (PortalApi) Balm.platformProxy()
-            .withFabric("com.holybuckets.challengetemple.externalapi.FabricPortalApi")
-            .withForge("com.holybuckets.challengetemple.externalapi.ForgePortalApi")
-            .build();
-            */
-
         //Events
         EventRegistrar registrar = EventRegistrar.getInstance();
-        com.holybuckets.villageecon.config.ModConfig.init(registrar);
-        com.holybuckets.villageecon.core.VillageManager.init(registrar);
+        ModConfig.init(registrar);
+        VillageManager.init(registrar);
+        Bazaar.init(registrar);
 
 
         //register local events

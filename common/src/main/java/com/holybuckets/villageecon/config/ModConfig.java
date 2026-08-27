@@ -50,22 +50,17 @@ public class ModConfig {
 
 
     //** Balm config access **//
-
-    /** Active toml-backed Balm config; falls back to compiled defaults if not yet registered **/
     public static VillageEconConfig getBalmConfig() {
         VillageEconConfig config = Balm.getConfig().getActiveConfig(VillageEconConfig.class);
         return (config != null) ? config : new VillageEconConfig();
     }
 
-    /** Default economy values applied when JSON fields are missing or invalid **/
     public static VillageEconConfig.DefaultEconomyConfigs getDefaults() {
         return getBalmConfig().defaultEconomyConfigs;
     }
 
 
     //** Economy config access **//
-
-    /** Returns the loaded (or default) VillageEconomyJsonConfig. Never null after server start **/
     public VillageEconomyJsonConfig getEconomyConfig() {
         return economyConfig;
     }
@@ -91,19 +86,16 @@ public class ModConfig {
         return economyConfig.getCycleModifiers();
     }
 
-    /** Personalities eligible for a village in the given biome **/
     public List<VillagePersonality> getPersonalitiesForBiome(ResourceLocation biome) {
         return economyConfig.getPersonalities().stream()
             .filter(p -> p.allowsBiome(biome)).toList();
     }
 
-    /** Luxury resources eligible for a village in the given biome **/
     public List<EconomyResource> getLuxuriesForBiome(ResourceLocation biome) {
         return economyConfig.getResources(ResourceType.LUXURY).stream()
             .filter(r -> r.allowsBiome(biome)).toList();
     }
 
-    /** Structures treated as villages and assigned a VillageEconomy on load **/
     public Set<ResourceLocation> getVillageStructures() {
         return Collections.unmodifiableSet(villageStructures);
     }
@@ -124,7 +116,7 @@ public class ModConfig {
         File configFile        = new File(configPath);
         File defaultConfigFile = new File(VillageEconomyJsonConfig.DEF_CONFIG_FILE_PATH);
 
-        LoggerProject.logInfo(CLASS_ID + "000",
+        LoggerProject.logInfo("011000",
             "Loading village economy config from: " + configFile.getAbsolutePath());
 
         String json = HBUtil.FileIO.loadJsonConfigs(
@@ -138,7 +130,7 @@ public class ModConfig {
         } catch (RuntimeException e) {
             String msg = String.format("Failed to parse user village economy config JSON: %s. Error:\n %s.\n\n Default configs will be applied",
                 configFile.getAbsolutePath(), e.getCause());
-            LoggerProject.logError(CLASS_ID + "001", msg);
+            LoggerProject.logError("011001", msg);
             this.economyConfig = new VillageEconomyJsonConfig(
                 VillageEconomyJsonConfig.buildDefaultConfig().serialize()
             );
@@ -149,7 +141,7 @@ public class ModConfig {
         validateLuxuryPool();
         loadVillageStructures(activeConfig);
 
-        LoggerProject.logInfo(CLASS_ID + "002",
+        LoggerProject.logInfo("011002",
             "Village economy config loaded: " + economyConfig.getAllResources().size() + " resource(s), "
             + economyConfig.getPersonalities().size() + " personality modifier(s), "
             + economyConfig.getCycleModifiers().size() + " cycle modifier(s)");
@@ -163,7 +155,7 @@ public class ModConfig {
         {
             resource.hydrate();
             if (!resource.isValid()) {
-                LoggerProject.logError(CLASS_ID + "003",
+                LoggerProject.logError("011003",
                     "Economy resource '" + resource.getResourceId()
                     + "': item not found in registry, removing resource");
                 toRemove.add(resource.getResourceId());
@@ -188,7 +180,7 @@ public class ModConfig {
     private void warnUnknownKeys(Set<String> keys, String owner) {
         for (String key : keys) {
             if (!economyConfig.hasResource(key)) {
-                LoggerProject.logWarning(CLASS_ID + "004",
+                LoggerProject.logWarning("011004",
                     owner + " references unknown resource '" + key + "'; the modifier will have no effect");
             }
         }
@@ -200,7 +192,7 @@ public class ModConfig {
         int poolSize = economyConfig.getResources(ResourceType.LUXURY).size();
         int assigned = economyConfig.getAssignedLuxuryResourceCount();
         if (assigned > poolSize) {
-            LoggerProject.logWarning(CLASS_ID + "005",
+            LoggerProject.logWarning("011005",
                 "assignedLuxuryResourceCount (" + assigned + ") exceeds the luxury pool size ("
                 + poolSize + "); villages will be assigned at most " + poolSize + " luxuries");
         }
@@ -214,7 +206,7 @@ public class ModConfig {
             try {
                 villageStructures.add(new ResourceLocation(structId));
             } catch (Exception e) {
-                LoggerProject.logWarning(CLASS_ID + "006",
+                LoggerProject.logWarning("011006",
                     "Invalid village structure id in config: '" + structId + "'. " + e.getMessage());
             }
         }

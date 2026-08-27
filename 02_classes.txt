@@ -75,11 +75,52 @@ core.model.Mayor        (015) Wraps the Mayor Villager entity (UUID). Holds most
 core.model.ResourceLedger (014) resource id -> item count, + currency.
     - add/remove/get, copyOf, diff(other) for reconciliation, NBT serialization.
 
-PLACEHOLDERS (not needed yet)
+TRADE LAYER (scaffolded)
+---
+com.holybuckets.villageecon.core.trade
+
+Bazaar          (019) Singleton per level (Overworld only for now), Map<LevelAccessor, Bazaar>.
+    - Map<Item, Market> markets; addMarket(Item); postBuyOffer/postSellOffer(Item, Post);
+      static buyOffer/sellOffer(Level, Item, Post).
+    - Global sale log (List<Sale>, transient); recordSale(Sale) -> log + market rate update.
+    - Created on overworld level load; adds a Market per configured resource and seeds
+      each MarketRate with the initial rate r/q added N times (phases out with real trades).
+
+Market          (020) One resource's open market. Queue<Post> buys, List<Post> sells.
+    - buy(Post) / sell(Post).
+    - flushMarket(): per buyer, filter sellers within buyer's chunk radius
+      (VillageEconomy::getBuyRadius = villageLevel * buyRadiusPerLevelChunks toml),
+      random eligible seller, haggle. Each buyer/seller trades once per tickTrade;
+      posts removed after their attempt.
+    - haggle(buy, sell): weight_i = |d_i|/(|d_i|+|d_k|);
+      price = reserveSell + weight_i*(reserveBuy - reserveSell).
+      No zone of agreement (reserveBuy < reserveSell) -> natural fail; plus a
+      tradeFallthroughChance random fail. qty = min(quantityDemands).
+      Updates both ledgers via ResourceLedger::logTrade, then Bazaar::recordSale.
+
+Post            (021) village, demand (d), quantityDemand, demandReserve, ledger.
+                One offer per resource per village per tickTrade; buy XOR sell.
+Sale            (022) seller, buyer, salePrice, saleQuantity, saleTime, resource Item
+                (+resourceId for ledger keys). Immutable.
+MarketRate      (023) Volume-weighted moving average of last N trades
+                (N = marketRateTradeWindow toml). seed(rate) adds the seed N times.
+
+Trade flow per tickTrade (120 ticks): VillageManager sorts villages by wealth (desc) ->
+each Mayor recalculates demand, rolls agreeableness ~N(personality.agreeableness,
+agreeablenessStdDev) clamped [0,1], picks buy XOR sell per resource (more profitable
+side vs market rate), derives demandReserve (buy: a*d; sell: d*(2-a)) and posts to the
+Bazaar -> Bazaar.flushMarkets() haggles everything against theoLedgers.
+
+toml (TradeConfigs): marketRateTradeWindow, tradeFallthroughChance, agreeablenessStdDev,
+buyRadiusPerLevelChunks. JSON: personality 'agreeableness' (0..1, default 0.5).
+
+PLACEHOLDERS
     core.EconomyMath  (017) stateless math (quotaFraction + growthReward implemented;
                       profit/marginalDemand TODO). No MC imports -> JUnit testable.
-    core.MarketState  (016) global market aggregates; marketRate(j) returns 1f TODO.
-    core.TradeEngine  (018) scheduleIncomingTrade/scheduleOutgoingTrade/executeScheduledTrades TODO.
+    core.MarketState  (016) facade: marketRate(j) delegates to the overworld Bazaar;
+                      totalCurrency / V / T TODO.
+    core.TradeEngine  (018) cycle-end settlement: scheduleIncoming/Outgoing/execute TODO
+                      (physical resource movement outsourced here for development).
 
 
 ORDERING / LIFECYCLE

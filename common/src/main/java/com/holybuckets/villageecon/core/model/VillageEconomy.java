@@ -129,6 +129,12 @@ public class VillageEconomy implements IMangedChunkData {
 
     public List<String> getLuxuryResourceIds() { return luxuryResourceIds; }
 
+    /** Chunk radius in which this village can reach sellers on the market; grows with village level **/
+    public int getBuyRadius() {
+        int perLevel = ModConfig.getBalmConfig().tradeConfigs.buyRadiusPerLevelChunks;
+        return Math.max(1, villageLevel) * perLevel;
+    }
+
     /** Biome at the village origin **/
     @Nullable
     public ResourceLocation getBiome() {

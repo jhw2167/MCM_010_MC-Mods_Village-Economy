@@ -8,6 +8,9 @@ import com.holybuckets.villageecon.config.model.VillagePersonality;
 import com.holybuckets.villageecon.core.EconomyMath;
 import com.holybuckets.villageecon.core.MarketState;
 import com.holybuckets.villageecon.core.TradeEngine;
+import com.holybuckets.villageecon.core.trade.Bazaar;
+import com.holybuckets.villageecon.core.trade.Post;
+import net.minecraft.world.item.Item;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -135,12 +138,13 @@ public class Mayor {
     //** PROCESSES **//
 
     /**
-     * tickProcess - every 120 ticks demand is recalculated and speculative
-     * trades are made against the theoLedger.
+     * tickProcess (tickTrade) - every 120 ticks demand is recalculated and buy/sell
+     * offers are posted to the Bazaar; theoretical trades settle against the theoLedger
+     * when the VillageManager flushes the markets.
      */
     public void tickProcess() {
         recalculateDemand();
-        speculativeTrades();
+        submitTradeOffers();
     }
 
     /**
@@ -169,28 +173,57 @@ public class Mayor {
     }
 
     /**
-     * Makes speculative trades against the theoLedger based on recalculated demand.
-     * Surplus demand -> tryBuy; low demand on held stock -> trySell.
+     * Posts one buy OR sell offer per active resource to the Bazaar - whichever side
+     * is more profitable. The reservation price (demandReserve) is derived from the
+     * true demand d, modulated by the agreeableness rolled for this tickTrade.
      */
-    private void speculativeTrades()
+    private void submitTradeOffers()
     {
-        for (Map.Entry<String, Float> entry : demand.entrySet()) {
-            //TODO: compare demand to market rate and trade thresholds
-            //if (entry.getValue() > buyThreshold)  tryBuy(entry.getKey(), qty);
-            //if (entry.getValue() < sellThreshold) trySell(entry.getKey(), qty);
+        for (EconomyResource resource : village.getActiveResources())
+        {
+            String id = resource.getResourceId();
+            Item item = resource.getItem();
+            if (item == null) continue;
+
+            float d = demand.getOrDefault(id, 0f);      //true value of one unit to this village
+            float D = MarketState.marketRate(id);       //current market rate
+            float a = rollAgreeableness(RANDOM);        //TODO: thread a world-seeded rng from VillageManager
+
+            float buyProfit = d - D;    //profit per unit if we buy at market rate
+            float sellProfit = D - d;   //profit per unit if we sell at market rate
+            if (buyProfit <= 0 && sellProfit <= 0) continue;
+
+            //TODO: derive quantity from demand strength and stock; one stack for now
+            int quantity = 16;
+
+            if (buyProfit >= sellProfit)
+            {
+                //a=1: pay up to the full value d; a=0: only trade at full expected profit (pay ~0)
+                int reserveBuy = Math.round(a * d);
+                Post post = new Post(village, Math.round(d), quantity, reserveBuy, theoLedger);
+                Bazaar.buyOffer(village.getLevel(), item, post);
+            }
+            else
+            {
+                if (theoLedger.get(id) < quantity) continue;    //can't sell what we don't hold
+                //a=1: sell at cost basis d; a=0: demand full expected profit on top (2d)
+                int reserveSell = Math.round(d * (2f - a));
+                Post post = new Post(village, Math.round(d), quantity, reserveSell, theoLedger);
+                Bazaar.sellOffer(village.getLevel(), item, post);
+            }
         }
     }
 
-    /** Speculatively buys the resource on the market, updating the theoLedger. TODO **/
-    public boolean tryBuy(String resourceId, int count) {
-        //TODO: check theoLedger currency vs market rate; theoLedger.add + subtract currency
-        return false;
-    }
-
-    /** Speculatively sells the resource on the market, updating the theoLedger. TODO **/
-    public boolean trySell(String resourceId, int count) {
-        //TODO: check theoLedger supply; theoLedger.remove + add currency
-        return false;
+    /**
+     * Rolls this tickTrade's agreeableness: a normal distribution centered on the
+     * personality's configured agreeableness, clamped to [0, 1].
+     * Takes the rng as a parameter so a seeded Random can be threaded in (see
+     * OreClusterCalculator::calculateClusterLocations for the pattern).
+     */
+    private float rollAgreeableness(Random rng) {
+        double sigma = ModConfig.getBalmConfig().tradeConfigs.agreeablenessStdDev;
+        double rolled = rng.nextGaussian() * sigma + personalityModifier.getAgreeableness();
+        return (float) Math.max(0d, Math.min(1d, rolled));
     }
 
     /**

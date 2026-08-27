@@ -15,6 +15,7 @@ import com.holybuckets.villageecon.Constants;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.core.model.VillageEconomy;
+import com.holybuckets.villageecon.core.trade.Bazaar;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
@@ -24,6 +25,7 @@ import net.minecraft.world.level.ChunkPos;
 
 import javax.annotation.Nullable;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -135,9 +137,21 @@ public class VillageManager {
         //else: existing villages are restored from chunk NBT via VillageEconomy::resolveSubData
     }
 
-    /** every 120 ticks: demand recalculation and speculative trades at the Mayor level **/
-    private void tickProcess() {
-        villages.values().forEach(VillageEconomy::tickProcess);
+    /**
+     * every 120 ticks (tickTrade): starting with the wealthiest village, each village
+     * recalculates demand and posts offers to the Bazaar, then all markets are flushed.
+     * TODO: spread submission over a few ticks if village count grows large
+     */
+    private void tickProcess()
+    {
+        villages.values().stream()
+            .sorted(Comparator.comparingDouble(
+                (VillageEconomy v) -> (v.getMayor() != null) ? v.getMayor().getTheoLedger().getCurrency() : 0)
+                .reversed())
+            .forEach(VillageEconomy::tickProcess);
+
+        Bazaar bazaar = Bazaar.get(overworld);
+        if (bazaar != null) bazaar.flushMarkets();
     }
 
     /** each day: production and interest granted to static ledgers; advances the cycle clock **/

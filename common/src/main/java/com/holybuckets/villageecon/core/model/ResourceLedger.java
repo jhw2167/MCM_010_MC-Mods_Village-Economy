@@ -1,5 +1,6 @@
 package com.holybuckets.villageecon.core.model;
 
+import com.holybuckets.villageecon.core.trade.Sale;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.Collections;
@@ -78,6 +79,26 @@ public class ResourceLedger {
 
     public void addCurrency(float amount) {
         this.currency += amount;
+    }
+
+
+    //** Trading **//
+
+    /**
+     * Applies a completed sale to this ledger.
+     * Buyer: gains resources, pays price * quantity in currency.
+     * Seller: loses resources, receives price * quantity in currency.
+     */
+    public void logTrade(Sale sale, boolean isBuyer) {
+        if (sale == null) return;
+        int totalPrice = sale.getSalePrice() * sale.getSaleQuantity();
+        if (isBuyer) {
+            add(sale.getResourceId(), sale.getSaleQuantity());
+            addCurrency(-totalPrice);
+        } else {
+            remove(sale.getResourceId(), sale.getSaleQuantity());
+            addCurrency(totalPrice);
+        }
     }
 
 
