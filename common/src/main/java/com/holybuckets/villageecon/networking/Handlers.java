@@ -15,9 +15,8 @@ public class Handlers {
         //Initializing class
     }
 
-    public static void handleBlockStateUpdates(Player p, BlockStateUpdatesMessage m) {
-        RECEIVED++;
-        POOL.submit(() -> BlockStateUpdatesMessageHandler.handle(p, m));
+    public static void handleLedgerSalesSync(Player p, LedgerSalesSync m) {
+        MarketSalesCache.accept(m);
     }
 
 

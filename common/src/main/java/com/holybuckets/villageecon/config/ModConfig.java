@@ -12,6 +12,7 @@ import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -94,6 +95,15 @@ public class ModConfig {
     public List<EconomyResource> getLuxuriesForBiome(ResourceLocation biome) {
         return economyConfig.getResources(ResourceType.LUXURY).stream()
             .filter(r -> r.allowsBiome(biome)).toList();
+    }
+
+    public Item getCurrencyItem() {
+        Item item = HBUtil.ItemUtil.itemNameToItem(getBalmConfig().tradeConfigs.currencyItem);
+        return (item != null) ? item : Items.EMERALD;
+    }
+
+    public int getMayorTradeSlotCapacity() {
+        return Math.max(1, getBalmConfig().tradeConfigs.mayorTradeSlotCapacity);
     }
 
     public Set<ResourceLocation> getVillageStructures() {

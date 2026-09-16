@@ -1,6 +1,6 @@
 package com.holybuckets.villageecon.core.trade;
 
-import com.holybuckets.villageecon.core.model.VillageEconomy;
+import com.holybuckets.villageecon.core.model.Mayor;
 import net.minecraft.world.item.Item;
 
 /**
@@ -13,15 +13,15 @@ public class Sale {
 
     public static final String CLASS_ID = "022";
 
-    private final VillageEconomy seller;
-    private final VillageEconomy buyer;
+    private final Mayor seller;
+    private final Mayor buyer;
     private final int salePrice;        //per unit
     private final int saleQuantity;
     private final long saleTime;        //game time (ticks) the sale occurred
     private final Item resource;
     private final String resourceId;    //economy config resource id, for ledger keys
 
-    public Sale(VillageEconomy seller, VillageEconomy buyer, int salePrice, int saleQuantity,
+    public Sale(Mayor seller, Mayor buyer, int salePrice, int saleQuantity,
                 long saleTime, Item resource, String resourceId) {
         this.seller = seller;
         this.buyer = buyer;
@@ -32,9 +32,9 @@ public class Sale {
         this.resourceId = resourceId;
     }
 
-    public VillageEconomy getSeller() { return seller; }
+    public Mayor getSeller() { return seller; }
 
-    public VillageEconomy getBuyer() { return buyer; }
+    public Mayor getBuyer() { return buyer; }
 
     public int getSalePrice() { return salePrice; }
 
@@ -50,6 +50,7 @@ public class Sale {
     public String toString() {
         return String.format("Sale[%s x%d @ %d, %s -> %s, t=%d]",
             resourceId, saleQuantity, salePrice,
-            seller != null ? seller.getId() : "?", buyer != null ? buyer.getId() : "?", saleTime);
+            seller != null ? seller.getVillageChunkId() : "?",
+            buyer != null ? buyer.getVillageChunkId() : "?", saleTime);
     }
 }

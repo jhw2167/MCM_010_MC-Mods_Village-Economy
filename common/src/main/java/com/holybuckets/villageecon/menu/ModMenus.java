@@ -13,10 +13,14 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 public class ModMenus {
 
     public static DeferredObject<MenuType<TemplateChestEntityMenu>> countingChestMenu;
+    public static DeferredObject<MenuType<MayorTradeMenu>> mayorTradeMenu;
 
 
     public static void initialize(BalmMenus menus)
     {
+        mayorTradeMenu = menus.registerMenu(id("mayor_trade_menu"),
+            (syncId, inventory, buf) -> MayorTradeMenu.fromNetwork(syncId, inventory, buf));
+
         countingChestMenu = menus.registerMenu(id("counting_chest_menu"),
             (syncId, inventory, buf) -> {
                 BlockPos pos = buf.readBlockPos();

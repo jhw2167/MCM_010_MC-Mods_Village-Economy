@@ -12,13 +12,6 @@ import com.holybuckets.villageecon.config.model.VillagePersonality;
 import javax.annotation.Nullable;
 import java.util.*;
 
-/**
- * Class: VillageEconomyJsonConfig
- * Description:
- *
- * The chief purpose of this class is to support serializing and deserializing the
- * JSON configuration; values should be read from this object at runtime via ModConfig.
- */
 public class VillageEconomyJsonConfig implements IStringSerializable {
 
     public static final String CLASS_ID = "010";
@@ -43,7 +36,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
 
     //** Constructors **//
-
     public VillageEconomyJsonConfig() {
         VillageEconConfig.DefaultEconomyConfigs defaults = ModConfig.getDefaults();
         this.growthFactor = defaults.growthFactor;
@@ -54,7 +46,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         this.assignedLuxuryResourceCount = defaults.assignedLuxuryResourceCount;
     }
 
-    /** Parse directly from a JSON string **/
     public VillageEconomyJsonConfig(String jsonString) {
         this();
         deserialize(jsonString);
@@ -62,7 +53,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
 
     //** Getters **//
-
     public float getGrowthFactor() { return growthFactor; }
 
     public float getDemandDampeningFactor() { return demandDampeningFactor; }

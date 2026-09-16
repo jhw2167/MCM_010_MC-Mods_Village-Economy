@@ -9,6 +9,10 @@ public class ModScreens {
             ModMenus.countingChestMenu::get,
             CountingChestScreen::new
         );
+        screens.registerScreen(
+            ModMenus.mayorTradeMenu::get,
+            MayorTradeScreen::new
+        );
     }
 
 }

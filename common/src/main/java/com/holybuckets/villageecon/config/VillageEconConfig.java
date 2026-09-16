@@ -7,15 +7,7 @@ import net.blay09.mods.balm.api.config.reflection.NestedType;
 
 import java.util.List;
 
-/**
- * Class: VillageEconConfig
- * Description: Balm (toml) configuration for HBs Village Economy.
- * Holds general mod settings, the path to the player-editable JSON economy config,
- * and the default values applied when JSON fields are missing or invalid.
- *
- * NOTE: This is not the JSON config for the economy itself (resources, personalities,
- * cycle modifiers); that JSON belongs in the file specified by 'villageEconomyConfig'.
- */
+
 @Config(Constants.MOD_ID)
 public class VillageEconConfig {
 
@@ -23,7 +15,6 @@ public class VillageEconConfig {
 
     public static final String DEF_VILLAGE_ECONOMY_CONFIG_PATH = "config/HBVillageEconomyConfig.json";
 
-    /** Maximum level a village may reach, used to bound level-indexed arrays **/
     public static final int MAX_VILLAGE_LEVEL = 10;
 
     public static final float DEF_GROWTH_FACTOR = 2f;
@@ -38,6 +29,7 @@ public class VillageEconConfig {
     public static final float DEF_RESOURCE_MODIFIER = 1f;
     public static final int DEF_WEIGHT = 10;
     public static final float DEF_AGREEABLENESS = 0.5f;
+    public static final String DEF_CURRENCY_ITEM = "minecraft:emerald";
 
 
     //** CONFIG FIELDS **//
@@ -100,6 +92,12 @@ public class VillageEconConfig {
 
         @Comment("Chunk radius per village level in which a buying village can reach sellers: radius = villageLevel * this value")
         public int buyRadiusPerLevelChunks = 32;
+
+        @Comment("Item used as currency when a player trades resources with a village Mayor")
+        public String currencyItem = DEF_CURRENCY_ITEM;
+
+        @Comment("Maximum stack size accepted by the Mayor trade screen submission slot")
+        public int mayorTradeSlotCapacity = 999;
     }
 
     public TradeConfigs tradeConfigs = new TradeConfigs();

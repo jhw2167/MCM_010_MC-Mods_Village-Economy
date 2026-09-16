@@ -1,0 +1,6 @@
+{
+  "entity.hbs_village_econ.mayor": "Mayor",
+  "menu.hbs_village_econ.mayor_trade": "Quotas (Stacks)",
+  "screen.hbs_village_econ.inventory": "Inventory",
+  "screen.hbs_village_econ.graph": "Graph"
+}

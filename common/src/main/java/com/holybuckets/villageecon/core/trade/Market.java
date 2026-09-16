@@ -3,7 +3,7 @@ package com.holybuckets.villageecon.core.trade;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.model.EconomyResource;
-import com.holybuckets.villageecon.core.model.VillageEconomy;
+import com.holybuckets.villageecon.core.model.Mayor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.ChunkPos;
 
@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Random;
+
+import static com.holybuckets.foundation.HBUtil.ChunkUtil.chunkDist;
 
 /**
  * Class: Market
@@ -32,8 +34,11 @@ public class Market {
     private final String resourceId;
     private final MarketRate marketRate;
 
+    public static final int SALE_HISTORY_SIZE = 20;
+
     private final Queue<Post> buyPosts = new ArrayDeque<>();
     private final List<Post> sellPosts = new ArrayList<>();
+    private final ArrayDeque<Integer> recentSalePrices = new ArrayDeque<>();
 
     public Market(Item item) {
         this.item = item;
@@ -61,6 +66,16 @@ public class Market {
 
     public float rate() { return marketRate.rate(); }
 
+    public List<Integer> getRecentSalePrices() { return new ArrayList<>(recentSalePrices); }
+
+    public void recordSale(Sale sale) {
+        if (sale == null) return;
+        marketRate.addSample(sale);
+        recentSalePrices.addLast(sale.getSalePrice());
+        while (recentSalePrices.size() > SALE_HISTORY_SIZE)
+            recentSalePrices.removeFirst();
+    }
+
 
     //** POSTING **//
 
@@ -80,40 +95,63 @@ public class Market {
     //** MATCHING **//
 
     /**
-     * Iterates over all buyers; for each, filters sellers to those within the buyer's
-     * chunk radius (dependent on village level, VillageEconomy::getBuyRadius), draws a
-     * random eligible seller and haggles. Unmatched posts are discarded at the end of
-     * the tickTrade.
+     * - Sorts buy postings by reserve demand, more desperate goes first
+     * - Attempts to trade with nearest seller within the buyer's radius
+     * - All buy and sell posts are cleared each cycle
      */
     public void flushMarket(Bazaar bazaar)
     {
-        while (!buyPosts.isEmpty())
+        //sort
+        List<Post> sortedBuyPosts = new ArrayList<>(buyPosts);
+        sortedBuyPosts.sort((a, b) -> Integer.compare(b.getDemandReserve(), a.getDemandReserve()));
+
+        for(Post buy : sortedBuyPosts)
         {
-            Post buy = buyPosts.poll();
             Post sell = pickSeller(buy);
             if (sell == null) continue;
 
             sellPosts.remove(sell);     //each seller trades at most once per tickTrade
-            haggle(bazaar, buy, sell);
+            Sale sale = haggle(buy, sell);
+            if (sale != null) {
+                buy.getLedger().logTrade(sale, true);
+                sell.getLedger().logTrade(sale, false);
+                bazaar.recordSale(sale);
+            }
+
         }
+
+        buyPosts.clear();
         sellPosts.clear();
     }
 
-    /** Random seller within the buyer's radius; null if none eligible **/
+    //Find the closest seller by distance to the buyer's village
     @Nullable
     private Post pickSeller(Post buy)
     {
-        VillageEconomy buyer = buy.getVillage();
+        Mayor buyer = buy.getVillage();
         int radius = buyer.getBuyRadius();
 
-        List<Post> eligible = new ArrayList<>();
+        Post eligible = null;
         for (Post sell : sellPosts) {
             if (sell.getVillage() == buyer) continue;
-            if (chunkDist(buyer.getChunkPos(), sell.getVillage().getChunkPos()) <= radius)
-                eligible.add(sell);
+            if (chunkDist(buyer, sell) <= radius)
+            {
+                if (eligible == null) eligible = sell;
+                else if (chunkDist(buyer, sell) < chunkDist(buyer, eligible))
+                        eligible = sell;
+            }
         }
-        if (eligible.isEmpty()) return null;
-        return eligible.get(RANDOM.nextInt(eligible.size()));
+        return eligible;
+    }
+
+    private int chunkDist(Mayor buyer, Post sell) {
+        if (buyer == null || sell == null) return Integer.MAX_VALUE;
+        return chunkDist(buyer.getChunkPos(), sell.getVillage().getChunkPos());
+    }
+
+    private static int chunkDist(Post a, Post b) {
+        if (a == null || b == null) return Integer.MAX_VALUE;
+        return chunkDist(a.getVillage().getChunkPos(), b.getVillage().getChunkPos());
     }
 
     private static int chunkDist(ChunkPos a, ChunkPos b) {
@@ -122,24 +160,22 @@ public class Market {
     }
 
     /**
-     * Haggles a price between one buyer and one seller according to each post's
-     * demandReserve:
-     *   weight_i = |d_i| / (|d_i| + |d_k|)
-     *   price = reservation_sell_k + weight_i * (reservation_buy_i - reservation_sell_k)
-     * Quantity is the min of both quantityDemands. A small fallthrough chance means
-     * the trade simply doesn't occur.
+     * Determines sale price based on the buyers and sellers **RESERVER PRICE**
+     * Reserver price is a Random number with lambda = marketRate, multipied by agreeableness
+     *
+     * Sale is returned if present
      */
-    private void haggle(Bazaar bazaar, Post buy, Post sell)
+    private Sale haggle(Post buy, Post sell)
     {
         int reserveBuy = buy.getDemandReserve();
         int reserveSell = sell.getDemandReserve();
 
         //No zone of agreement - the natural fallthrough
-        if (reserveBuy < reserveSell) return;
+        if (reserveBuy < reserveSell) return null;
 
         //Fallthrough: small random chance the trade just doesn't occur
         float fallthrough = ModConfig.getBalmConfig().tradeConfigs.tradeFallthroughChance;
-        if (RANDOM.nextFloat() < fallthrough) return;
+        if (RANDOM.nextFloat() < fallthrough) return null;
 
         float di = Math.abs(buy.getDemand());
         float dk = Math.abs(sell.getDemand());
@@ -147,20 +183,11 @@ public class Market {
 
         int price = Math.round(reserveSell + weight * (reserveBuy - reserveSell));
         int quantity = Math.min(buy.getQuantityDemand(), sell.getQuantityDemand());
-        if (quantity <= 0) return;
+        if (quantity <= 0) return null;
 
         long saleTime = (buy.getVillage().getLevel() != null)
             ? buy.getVillage().getLevel().getGameTime() : 0L;
 
-        Sale sale = new Sale(sell.getVillage(), buy.getVillage(), price, quantity, saleTime, item, resourceId);
-
-        //Update each village's ledger with the trade
-        buy.getLedger().logTrade(sale, true);
-        sell.getLedger().logTrade(sale, false);
-
-        //Global tracker + market rate update
-        bazaar.recordSale(sale);
-
-        LoggerProject.logDebug(CLASS_ID + "001", "Haggled " + sale);
+        return new Sale(sell.getVillage(), buy.getVillage(), price, quantity, saleTime, item, resourceId);
     }
 }

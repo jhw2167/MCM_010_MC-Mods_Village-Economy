@@ -16,14 +16,9 @@ import javax.annotation.Nullable;
 import java.util.*;
 
 /**
- * Class: Bazaar
- * Description: Singleton per level (for now just the Overworld). Holds the map of
- * <Item, Market> markets, the global log of all sales, and updates market rates
- * as sales are recorded.
- *
- * On creation, a Market is added for every configured economy resource and its
- * MarketRate is seeded with the initial rate r/q added N times, so the seed is
- * slowly phased out by real trades.
+ * The Bazaar holds all the markets
+ * Each market encapsulates a single tradable Resource by the village
+ * The bazaars job is to hold all markets and call the per tick trade alg on them
  */
 public class Bazaar {
 
@@ -45,7 +40,6 @@ public class Bazaar {
         this.saleLog = new ArrayList<>();
         BAZAARS.put(level, this);
 
-        //Create a market for every configured resource and seed its rate
         for (EconomyResource resource : ModConfig.getInstance().getAllResources()) {
             if (resource.getItem() == null) continue;
             addMarket(resource.getItem());
@@ -97,21 +91,17 @@ public class Bazaar {
         market.sell(posting);
     }
 
-    /** Matches and haggles all posted offers; called once per tickTrade after all villages post **/
+    //Flushes all market postings for this tick
     public void flushMarkets() {
         for (Market market : markets.values())
             market.flushMarket(this);
     }
 
-    /**
-     * Saves the sale to the global tracker and updates the market rate with this data.
-     * Ledger updates already occurred in Market::haggle.
-     */
     public void recordSale(Sale sale) {
         if (sale == null) return;
         saleLog.add(sale);
         Market market = markets.get(sale.getResource());
-        if (market != null) market.getMarketRate().addSample(sale);
+        if (market != null) market.recordSale(sale);
     }
 
     /**

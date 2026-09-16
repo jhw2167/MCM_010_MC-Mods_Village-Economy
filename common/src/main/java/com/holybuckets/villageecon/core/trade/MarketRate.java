@@ -4,12 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Class: MarketRate
- * Description: Volume-weighted moving average of the last N trades for one resource.
- * N comes from the toml config (marketRateTradeWindow).
- *
- * On server start the initial rate r/q is added N times, so the seed value is
- * slowly phased out as real trades fill the window.
+    * Determines Market Rate Price of a resource based on the last N trades
  */
 public class MarketRate {
 
@@ -24,14 +19,12 @@ public class MarketRate {
         this.window = Math.max(1, window);
     }
 
-    /** Seeds the calculator with the initial rate, added N times so it phases out **/
     public void seed(float initialRate) {
         samples.clear();
         for (int i = 0; i < window; i++)
             addSample(initialRate, 1);
     }
 
-    /** Records a trade; evicts the oldest sample once the window is full **/
     public void addSample(float price, int quantity) {
         if (quantity <= 0) return;
         samples.addLast(new Sample(price, quantity));
@@ -43,7 +36,6 @@ public class MarketRate {
         addSample(sale.getSalePrice(), sale.getSaleQuantity());
     }
 
-    /** Current market rate D: volume-weighted average over the window **/
     public float rate() {
         float totalValue = 0;
         long totalQuantity = 0;

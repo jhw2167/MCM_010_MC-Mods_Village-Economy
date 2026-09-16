@@ -1,80 +1,145 @@
 package com.holybuckets.villageecon.core.model;
 
+import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
+import com.holybuckets.villageecon.config.VillageEconConfig;
+import com.holybuckets.villageecon.config.VillageEconomyJsonConfig;
 import com.holybuckets.villageecon.config.model.CycleModifier;
 import com.holybuckets.villageecon.config.model.EconomyResource;
+import com.holybuckets.villageecon.config.model.EconomyResource.ResourceType;
 import com.holybuckets.villageecon.config.model.VillagePersonality;
 import com.holybuckets.villageecon.core.EconomyMath;
 import com.holybuckets.villageecon.core.MarketState;
 import com.holybuckets.villageecon.core.TradeEngine;
+import com.holybuckets.villageecon.core.VillageManager;
 import com.holybuckets.villageecon.core.trade.Bazaar;
 import com.holybuckets.villageecon.core.trade.Post;
+import com.holybuckets.villageecon.entity.MayorEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
 /**
- * Class: Mayor
- * Description: Wraps the Mayor Villager entity and holds most of the DYNAMIC data about
- * a village. The parent VillageEconomy only holds immutable data that cannot be lost
- * even if the mayor dies.
- *
- * Ledgers:
- *  - staticLedger: true current value of resources owned by the village
- *  - theoLedger: theoretical values of all village resources after speculative trades,
- *    updated every trade sequence. Rectified with staticLedger each cycle.
- */
+    Mayor class handles all dynamic transactions for the village,
+    the data is written to its compound tag
+
+    The Mayor object is held in RAM by the VillageManager for the lifetime of the
+    server, so a village keeps trading while its entity is unloaded. The entity is
+    attached and detached as it loads; it persists this object to its compound tag.
+**/
 public class Mayor {
 
     public static final String CLASS_ID = "015";
-    private static final Random RANDOM = new Random();
 
-    private final VillageEconomy village;       //parent, immutable village data
-    private UUID villagerId;                    //UUID of the Mayor Villager entity
+    private final ServerLevel level;
+    private MayorEntity entity;
+    private UUID villagerId;
+    private boolean alive = true;
+    private CompoundTag cachedNbt;
 
-    //Working copies passed down from VillageEconomy on mayor creation
+    private String villageChunkId;
     private int villageLevel;
-    private VillagePersonality personalityModifier;
-    private VillagePersonality biomeModifier;
+    private String personalityModifierId;
+    private String biomeModifierId;
+    private List<String> luxuryResourceIds = new ArrayList<>();
+
+    private VillagePersonality personalityModifier = VillageEconomyChunk.NEUTRAL;
+    private VillagePersonality biomeModifier = VillageEconomyChunk.NEUTRAL;
 
     //Dynamic economy state
-    private final ResourceLedger staticLedger;
-    private final ResourceLedger theoLedger;
+    private final ResourceLedger staticLedger = new ResourceLedger();
+    private final ResourceLedger theoLedger = new ResourceLedger();
     private CycleModifier currentCycleModifier;
     private final Map<String, Float> demand = new LinkedHashMap<>();  //d_ij - marginal demand per resource this tick
 
-
     //** Constructors **//
 
-    public Mayor(VillageEconomy village, @Nullable UUID villagerId,
-        int villageLevel, VillagePersonality personalityModifier, VillagePersonality biomeModifier)
-    {
-        this.village = village;
-        this.villagerId = villagerId;
-        this.villageLevel = villageLevel;
-        this.personalityModifier = personalityModifier;
-        this.biomeModifier = biomeModifier;
-        this.staticLedger = new ResourceLedger();
-        this.theoLedger = new ResourceLedger();
-        this.currentCycleModifier = ModConfig.getInstance().getEconomyConfig()
-            .getCycleModifier(CycleModifier.NONE_ID);
+    public Mayor(ServerLevel level) {
+        this.level = level;
+    }
+
+    public Mayor(ServerLevel level, VillageEconomyChunk village) {
+        this(level);
+        this.villageChunkId = village.getId();
+        this.villageLevel = village.getVillageLevel();
+        this.personalityModifierId = village.getPersonalityModifier().getId();
+        this.biomeModifierId = village.getBiomeModifier().getId();
+        this.luxuryResourceIds = new ArrayList<>(village.getLuxuryResourceIds());
+        hydrateModifiers();
+    }
+
+
+    @Nullable
+    private static VillageEconomyJsonConfig config() {
+        ModConfig c = ModConfig.getInstance();
+        return (c != null) ? c.getEconomyConfig() : null;
+    }
+
+    private static final CycleModifier NO_CYCLE_MODIFIER = new CycleModifier(CycleModifier.NONE_ID);
+
+
+
+    private CycleModifier cycleModifier() {
+        if (currentCycleModifier != null) return currentCycleModifier;
+        VillageEconomyJsonConfig c = config();
+        if (c != null) {
+            CycleModifier m = c.getCycleModifier(CycleModifier.NONE_ID);
+            if (m != null) return this.currentCycleModifier = m;
+        }
+        return NO_CYCLE_MODIFIER;
+    }
+
+    private void hydrateModifiers() {
+        VillageEconomyJsonConfig c = config();
+        if (c == null) return;
+
+        VillagePersonality p = c.getPersonality(personalityModifierId);
+        this.personalityModifier = (p != null) ? p : VillageEconomyChunk.NEUTRAL;
+
+        VillagePersonality b = c.getPersonality(biomeModifierId);
+        this.biomeModifier = (b != null) ? b : VillageEconomyChunk.NEUTRAL;
     }
 
 
     //** Getters / Setters **//
 
+    public MayorEntity getEntity() { return entity; }
+
     public UUID getVillagerId() { return villagerId; }
 
-    public void setVillagerId(UUID villagerId) { this.villagerId = villagerId; }
+    public boolean isAlive() { return alive; }
+
+    public boolean isEntityLoaded() { return entity != null && entity.isAlive(); }
+
+    public void attachEntity(MayorEntity entity) {
+        this.entity = entity;
+        this.villagerId = (entity != null) ? entity.getUUID() : this.villagerId;
+        this.alive = true;
+    }
+
+    public void detachEntity(MayorEntity entity) {
+        if (this.entity == entity) this.entity = null;
+    }
+
+    public void setDead() {
+        this.alive = false;
+        this.entity = null;
+    }
+
+    public String getVillageChunkId() { return villageChunkId; }
+
+    public void setVillageChunkId(String villageChunkId) { this.villageChunkId = villageChunkId; }
 
     public int getVillageLevel() { return villageLevel; }
 
@@ -84,52 +149,83 @@ public class Mayor {
 
     public ResourceLedger getTheoLedger() { return theoLedger; }
 
-    public CycleModifier getCurrentCycleModifier() { return currentCycleModifier; }
+    public CycleModifier getCurrentCycleModifier() { return cycleModifier(); }
 
     public Map<String, Float> getDemand() { return demand; }
 
-    /** Resolves the live Mayor Villager entity by UUID, or null if dead / unloaded **/
+    public VillagePersonality getPersonalityModifier() { return personalityModifier; }
+
+    public VillagePersonality getBiomeModifier() { return biomeModifier; }
+
+    public List<String> getLuxuryResourceIds() { return luxuryResourceIds; }
+
     @Nullable
-    public Villager getVillager() {
-        if (villagerId == null) return null;
-        ServerLevel level = village.getLevel();
-        if (level == null) return null;
-        Entity e = level.getEntity(villagerId);
-        return (e instanceof Villager v) ? v : null;
+    public ServerLevel getLevel() {
+        return level;
+    }
+
+    @Nullable
+    public ChunkPos getChunkPos() {
+        if (villageChunkId == null) return null;
+        return ChunkUtil.getChunkPos(villageChunkId);
+    }
+
+    public int getBuyRadius() {
+        int perLevel = ModConfig.getBalmConfig().tradeConfigs.buyRadiusPerLevelChunks;
+        return Math.max(1, villageLevel) * perLevel;
+    }
+
+    @Nullable
+    public VillageEconomyChunk getVillage() {
+        ChunkPos pos = getChunkPos();
+        if (pos == null) return null;
+        VillageManager manager = VillageManager.get(getLevel());
+        return (manager != null) ? manager.getVillage(pos) : null;
+    }
+
+    public List<EconomyResource> getActiveResources()
+    {
+        VillageEconomyJsonConfig cfg = config();
+        if (cfg == null) return new ArrayList<>();
+
+        ModConfig c = ModConfig.getInstance();
+        List<EconomyResource> active = new ArrayList<>(c.getResources(ResourceType.STAPLE));
+
+        if (villageLevel >= cfg.getBasicResourceStartLevel())
+            active.addAll(c.getResources(ResourceType.BASIC));
+
+        if (villageLevel >= cfg.getLuxuryResourceStartLevel()) {
+            for (String luxuryId : luxuryResourceIds) {
+                EconomyResource luxury = c.getResource(luxuryId);
+                if (luxury != null) active.add(luxury);
+            }
+        }
+        return active;
     }
 
 
     //** Modifiers **//
 
-    /**
-     * Effective favoribility b_j (0..2) for a resource.
-     * personality, biome and cycle modifiers are each neutral at 1 and ADDITIVE:
-     * b = personality + biome + cycle - 2, clamped to [0, 2]
-     */
     public float favoribility(String resourceId) {
         float b = personalityModifier.getDemandModifier(resourceId)
             + biomeModifier.getDemandModifier(resourceId)
-            + currentCycleModifier.getDemandModifier(resourceId)
+            + cycleModifier().getDemandModifier(resourceId)
             - 2f;
         return Math.max(0f, Math.min(2f, b));
     }
 
-    /** Effective production modifier for a resource; additive like favoribility, min 0 **/
     public float productionModifier(String resourceId) {
         float m = personalityModifier.getProductionModifier(resourceId)
             + biomeModifier.getProductionModifier(resourceId)
-            + currentCycleModifier.getProductionModifier(resourceId)
+            + cycleModifier().getProductionModifier(resourceId)
             - 2f;
         return Math.max(0f, m);
     }
 
-    /** Daily interest rate: globalInterestRate scaled by the personality's interest modifier **/
     public float interestRate() {
-        return ModConfig.getInstance().getEconomyConfig().getGlobalInterestRate()
-            * personalityModifier.getInterestModifier();
+        return config().getGlobalInterestRate() * personalityModifier.getInterestModifier();
     }
 
-    /** Price when this village sells the resource to a player: D_j * markup **/
     public float playerPrice(String resourceId) {
         return MarketState.marketRate(resourceId) * personalityModifier.getMarkup();
     }
@@ -138,25 +234,19 @@ public class Mayor {
     //** PROCESSES **//
 
     /**
-     * tickProcess (tickTrade) - every 120 ticks demand is recalculated and buy/sell
-     * offers are posted to the Bazaar; theoretical trades settle against the theoLedger
-     * when the VillageManager flushes the markets.
+     * Determine demand based on ledger
      */
     public void tickProcess() {
         recalculateDemand();
         submitTradeOffers();
     }
 
-    /**
-     * Recalculates marginal demand d_ij for each active resource:
-     * d_ij = del(C)*I + (1 - z*q_j)*(del(s)*b*D) + del(s)*r/q
-     * Light form here: dampened market value of one more unit plus its average quota bonus.
-     */
+    //Calculates marginal demand for each resource
     private void recalculateDemand()
     {
-        float z = ModConfig.getInstance().getEconomyConfig().getDemandDampeningFactor();
+        float z = config().getDemandDampeningFactor();
         demand.clear();
-        for (EconomyResource resource : village.getActiveResources())
+        for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
             int supply = theoLedger.get(id);
@@ -164,90 +254,82 @@ public class Mayor {
             float b = favoribility(id);
             float D = MarketState.marketRate(id);
 
-            //(1 - z*q) * b * D : market value of one more unit, dampened as needs are met
-            float d = (1f - z * q) * b * D;
+            //this village's current demand for one more unit of resource j
+            float d = b*D*(1f - z*q);
 
             //+ r/q : average quota bonus per unit  //TODO: EconomyMath.marginalDemand once MarketState is real
             demand.put(id, d);
         }
     }
 
-    /**
-     * Posts one buy OR sell offer per active resource to the Bazaar - whichever side
-     * is more profitable. The reservation price (demandReserve) is derived from the
-     * true demand d, modulated by the agreeableness rolled for this tickTrade.
-     */
+
     private void submitTradeOffers()
     {
-        for (EconomyResource resource : village.getActiveResources())
+        ServerLevel level = getLevel();
+        if (level == null) return;
+
+        for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
             Item item = resource.getItem();
             if (item == null) continue;
 
-            float d = demand.getOrDefault(id, 0f);      //true value of one unit to this village
-            float D = MarketState.marketRate(id);       //current market rate
-            float a = rollAgreeableness(RANDOM);        //TODO: thread a world-seeded rng from VillageManager
+            float d = demand.getOrDefault(id, 0f);
+            float D = MarketState.marketRate(id);
+            float a = rollAgreeableness(VillageManager.RANDOM);
 
             float buyProfit = d - D;    //profit per unit if we buy at market rate
             float sellProfit = D - d;   //profit per unit if we sell at market rate
-            if (buyProfit <= 0 && sellProfit <= 0) continue;
+            if (buyProfit <= 1 && sellProfit <= 1) continue;
 
-            //TODO: derive quantity from demand strength and stock; one stack for now
-            int quantity = 16;
+            //Quantity of trade derived at haggling time
+            int quantity = 1;
 
             if (buyProfit >= sellProfit)
             {
-                //a=1: pay up to the full value d; a=0: only trade at full expected profit (pay ~0)
                 int reserveBuy = Math.round(a * d);
-                Post post = new Post(village, Math.round(d), quantity, reserveBuy, theoLedger);
-                Bazaar.buyOffer(village.getLevel(), item, post);
+                Post post = new Post(this, Math.round(d), quantity, reserveBuy, theoLedger);
+                Bazaar.buyOffer(level, item, post);
             }
             else
             {
-                if (theoLedger.get(id) < quantity) continue;    //can't sell what we don't hold
-                //a=1: sell at cost basis d; a=0: demand full expected profit on top (2d)
+                if (theoLedger.get(id) < quantity) continue;
                 int reserveSell = Math.round(d * (2f - a));
-                Post post = new Post(village, Math.round(d), quantity, reserveSell, theoLedger);
-                Bazaar.sellOffer(village.getLevel(), item, post);
+                Post post = new Post(this, Math.round(d), quantity, reserveSell, theoLedger);
+                Bazaar.sellOffer(level, item, post);
             }
         }
     }
 
-    /**
-     * Rolls this tickTrade's agreeableness: a normal distribution centered on the
-     * personality's configured agreeableness, clamped to [0, 1].
-     * Takes the rng as a parameter so a seeded Random can be threaded in (see
-     * OreClusterCalculator::calculateClusterLocations for the pattern).
-     */
     private float rollAgreeableness(Random rng) {
         double sigma = ModConfig.getBalmConfig().tradeConfigs.agreeablenessStdDev;
         double rolled = rng.nextGaussian() * sigma + personalityModifier.getAgreeableness();
         return (float) Math.max(0d, Math.min(1d, rolled));
     }
 
-    /**
-     * dailyProcess - each day new resources and interest are granted to the village
-     * derived from their cyclic constants. Added to the STATIC ledger.
-     */
+    //Village receives pro-rated portion of cyclic resource amounts each day
     public void dailyProcess()
     {
-        for (EconomyResource resource : village.getActiveResources()) {
+        for (EconomyResource resource : getActiveResources()) {
             String id = resource.getResourceId();
             int produced = Math.round(resource.productionAt(villageLevel) * productionModifier(id));
             staticLedger.add(id, produced);
         }
 
-        //Interest accrues daily on reserve currency
         staticLedger.addCurrency(staticLedger.getCurrency() * (interestRate() - 1f));
+        cachedNbt = serializeNBT();
     }
 
     /**
-     * cycleProcess - the staticLedger is reconciled with the theoLedger.
-     * Surpluses (theo > static) are resources that will be traded from other villages to
-     * this one; deficits mean this village must schedule outgoing trades.
-     * Reward quotas are granted, level ups processed, and new quotas and cycle
-     * modifiers for the next cycle are drawn.
+     * Each cycle we reconcile the static ledger with the theorhetical ledger which
+     * processed all potential trades.
+     * - If theoLedger > staticLedger, we schedule incoming trades
+     * - If theoLedger < staticLedger, we schedule outgoing trades
+     *
+     * - reward the village for meeting quotas, and level up if all quotas are met
+     * - draw next cycle modifier
+     * - Add the next cycle's production to the theoLedger so it can work on trading new resources
+     * in the market
      */
     public void cycleProcess()
     {
@@ -255,32 +337,32 @@ public class Mayor {
         Map<String, Integer> diff = theoLedger.diff(staticLedger);
         for (Map.Entry<String, Integer> entry : diff.entrySet()) {
             if (entry.getValue() > 0)
-                TradeEngine.scheduleIncomingTrade(village, entry.getKey(), entry.getValue());
+                TradeEngine.scheduleIncomingTrade(this, entry.getKey(), entry.getValue());
             else if (entry.getValue() < 0)
-                TradeEngine.scheduleOutgoingTrade(village, entry.getKey(), -entry.getValue());
+                TradeEngine.scheduleOutgoingTrade(this, entry.getKey(), -entry.getValue());
         }
 
         //2. Grant quota rewards: floored quota fractions only
         boolean allQuotasMet = true;
-        for (EconomyResource resource : village.getActiveResources())
+        for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
             float q = EconomyMath.quotaFraction(staticLedger.get(id), resource.productionAt(villageLevel + 1));
             if (q < 1f) { allQuotasMet = false; continue; }
 
-            //TODO: real V and T counts from VillageManager / MarketState
             float reward = EconomyMath.growthReward(
                 MarketState.totalCurrency(),
-                ModConfig.getInstance().getEconomyConfig().getGrowthFactor(),
+                config().getGrowthFactor(),
                 1, 1);
             staticLedger.addCurrency((float) Math.floor(q) * reward);
         }
 
         //3. Process level ups
-        if (allQuotasMet && villageLevel < com.holybuckets.villageecon.config.VillageEconConfig.MAX_VILLAGE_LEVEL) {
+        if (allQuotasMet && villageLevel < VillageEconConfig.MAX_VILLAGE_LEVEL) {
             villageLevel++;
-            village.setVillageLevel(villageLevel);
-            LoggerProject.logInfo(CLASS_ID + "001", "Village " + village.getId() + " leveled up to " + villageLevel);
+            VillageEconomyChunk village = getVillage();
+            if (village != null) village.setVillageLevel(villageLevel);
+            LoggerProject.logInfo(CLASS_ID + "001", "Village " + villageChunkId + " leveled up to " + villageLevel);
         }
 
         //4. Rectify the theoLedger to the (post-trade) static ledger for the new cycle
@@ -289,47 +371,88 @@ public class Mayor {
 
         //5. Draw the cycle modifier for the next cycle
         this.currentCycleModifier = drawCycleModifier();
+
+        //6. Add to the theoledger the new cycle's production for each resource
+        for (EconomyResource resource : getActiveResources()) {
+            String id = resource.getResourceId();
+            int produced = Math.round(resource.productionAt(villageLevel) * productionModifier(id));
+            theoLedger.add(id, produced);
+        }
+
     }
 
-    /** Weighted draw of one cycle modifier from the configured pool **/
     private CycleModifier drawCycleModifier()
     {
         var pool = ModConfig.getInstance().getCycleModifiers();
         int totalWeight = pool.stream().mapToInt(CycleModifier::getWeight).sum();
-        if (totalWeight <= 0) return ModConfig.getInstance().getEconomyConfig().getCycleModifier(CycleModifier.NONE_ID);
+        if (totalWeight <= 0) return cycleModifier();
 
-        int roll = RANDOM.nextInt(totalWeight);
+        int roll = VillageManager.RANDOM.nextInt(totalWeight);
         for (CycleModifier modifier : pool) {
             roll -= modifier.getWeight();
             if (roll < 0) return modifier;
         }
-        return ModConfig.getInstance().getEconomyConfig().getCycleModifier(CycleModifier.NONE_ID);
+        return cycleModifier();
     }
 
 
+    //** Static
+    public static Mayor getMayor(Level level, String villageChunkId) {
+        return  getMayor(level, ChunkUtil.getChunkPos(villageChunkId));
+    }
+
+    public static Mayor getMayor(Level level, ChunkPos chunkPos) {
+        VillageManager manager = VillageManager.get(level);
+        if (manager == null) return null;
+        return manager.getMayor(chunkPos);
+    }
+
     //** Serialization **//
-    //TODO: consider persisting this data on the Villager entity itself instead of the chunk
 
     public CompoundTag serializeNBT() {
         CompoundTag tag = new CompoundTag();
-        if (villagerId != null) tag.putUUID("villagerId", villagerId);
+        if (villageChunkId != null) tag.putString("villageChunkId", villageChunkId);
+        tag.putBoolean("alive", alive);
         tag.putInt("villageLevel", villageLevel);
+        if (personalityModifierId != null) tag.putString("personalityModifier", personalityModifierId);
+        if (biomeModifierId != null) tag.putString("biomeModifier", biomeModifierId);
+        tag.putString("luxuryResources", String.join(",", luxuryResourceIds));
         tag.put("staticLedger", staticLedger.serializeNBT());
         tag.put("theoLedger", theoLedger.serializeNBT());
-        if (currentCycleModifier != null) tag.putString("currentCycleModifier", currentCycleModifier.getId());
+        tag.putString("currentCycleModifier", cycleModifier().getId());
         return tag;
     }
 
     public void deserializeNBT(CompoundTag tag) {
         if (tag == null || tag.isEmpty()) return;
-        if (tag.hasUUID("villagerId")) this.villagerId = tag.getUUID("villagerId");
+
+        if (tag.contains("villageChunkId")) this.villageChunkId = tag.getString("villageChunkId");
+        if (tag.contains("alive")) this.alive = tag.getBoolean("alive");
         this.villageLevel = tag.getInt("villageLevel");
+        this.personalityModifierId = tag.getString("personalityModifier");
+        this.biomeModifierId = tag.getString("biomeModifier");
+
+        this.luxuryResourceIds = new ArrayList<>();
+        String luxuries = tag.getString("luxuryResources");
+        if (!luxuries.isBlank()) {
+            for (String luxuryId : luxuries.split(","))
+                luxuryResourceIds.add(luxuryId.trim());
+        }
+
+        hydrateModifiers();
+
         staticLedger.deserializeNBT(tag.getCompound("staticLedger"));
         theoLedger.deserializeNBT(tag.getCompound("theoLedger"));
+
         if (tag.contains("currentCycleModifier")) {
-            CycleModifier modifier = ModConfig.getInstance().getEconomyConfig()
-                .getCycleModifier(tag.getString("currentCycleModifier"));
+            VillageEconomyJsonConfig cfg = config();
+            CycleModifier modifier = (cfg != null) ? cfg.getCycleModifier(tag.getString("currentCycleModifier")) : null;
             if (modifier != null) this.currentCycleModifier = modifier;
         }
+    }
+
+    public void syncData(MayorEntity mayorEntity) {
+        if (mayorEntity == null) return;
+        mayorEntity.setPendingMayorData(cachedNbt);
     }
 }

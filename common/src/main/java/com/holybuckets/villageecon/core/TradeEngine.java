@@ -1,6 +1,6 @@
 package com.holybuckets.villageecon.core;
 
-import com.holybuckets.villageecon.core.model.VillageEconomy;
+import com.holybuckets.villageecon.core.model.Mayor;
 
 /**
  * Class: TradeEngine
@@ -14,12 +14,12 @@ public class TradeEngine {
     public static final String CLASS_ID = "018";
 
     /** Schedule a trade delivering the resource from another village to this one. TODO **/
-    public static void scheduleIncomingTrade(VillageEconomy village, String resourceId, int count) {
+    public static void scheduleIncomingTrade(Mayor village, String resourceId, int count) {
         //TODO
     }
 
     /** Schedule a trade shipping the resource from this village to another. TODO **/
-    public static void scheduleOutgoingTrade(VillageEconomy village, String resourceId, int count) {
+    public static void scheduleOutgoingTrade(Mayor village, String resourceId, int count) {
         //TODO
     }
 

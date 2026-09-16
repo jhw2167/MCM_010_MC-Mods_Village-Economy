@@ -38,6 +38,8 @@ public class CommonClass {
         ModBlockEntities.initialize(Balm.getBlockEntities());
         ModItems.initialize(Balm.getItems());
         ModMenus.initialize(Balm.getMenus());
+        com.holybuckets.villageecon.entity.ModEntities.initialize(Balm.getEntities());
+        com.holybuckets.villageecon.networking.ModNetworking.initialize(Balm.getNetworking());
         
         isInitialized = true;
     }
