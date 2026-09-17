@@ -207,8 +207,6 @@ public class MayorTradeMenu extends AbstractContainerMenu {
             if (stack.is(currency)) currencyIn += stack.getCount();
             else if (offer.getItem() != null && stack.is(offer.getItem()))
                 resourceIn += stack.getCount()/64;
-
-
         }
 
         if (resourceIn > 0 && offer.getItem() != null) {
@@ -232,7 +230,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     {
         MayorTradeOffer offer = getSelected();
         if (offer == null || mayor == null) {
-            consumeInputs();
+            consumeInputs(0);
             return;
         }
         //calculate leftover in input slot after dividing by 64, and put it back in the input slot
@@ -240,9 +238,10 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         Item currency = ModConfig.getInstance().getCurrencyItem();
         ResourceLedger ledger = mayor.getStaticLedger();
 
+        int leftover = 0;
         if (taken.is(currency)) {
             int resourceIn = countInput(offer.getItem())/64;
-            int leftover =  tradeContainer.getItem(0).getCount() % 64;
+            leftover =  tradeContainer.getItem(0).getCount() % 64;
             ledger.add(offer.getResourceId(), resourceIn);
             ledger.addCurrency(-taken.getCount());
         } else if (offer.getItem() != null && taken.is(offer.getItem())) {
@@ -251,7 +250,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
             ledger.addCurrency(currencyIn);
         }
 
-        consumeInputs();
+        consumeInputs(leftover);
     }
 
     private int countInput(@Nullable Item item) {
@@ -267,8 +266,11 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     private void consumeInputs(int leftOverStack) {
         updatingOutput = true;
         try {
-            for (int i = 0; i < INPUT_SLOTS; i++)
-                tradeContainer.getItem(i).setCount(leftOverStack);
+            if(leftOverStack > 0 ) {
+                tradeContainer.getItem(0).setCount(leftOverStack);
+            } else {
+             tradeContainer.setItem(0, ItemStack.EMPTY);
+            }
             tradeContainer.setItem(OUTPUT_SLOT, ItemStack.EMPTY);
         } finally {
             updatingOutput = false;

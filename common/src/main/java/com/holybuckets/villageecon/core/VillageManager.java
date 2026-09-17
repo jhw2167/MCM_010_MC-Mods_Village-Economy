@@ -440,14 +440,47 @@ public class VillageManager {
 
     public static void mayorEntityAdded(Level level, String villageChunkId, MayorEntity mayorEntity) {
         VillageManager manager = get(level);
-        if (manager == null) return;
-        if(villageChunkId == null || mayorEntity == null) return;
-        if(manager.mayorEntities.containsKey(mayorEntity)) {
-            manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
-            manager.getMayor(villageChunkId).syncData(mayorEntity);
+        if (manager == null || mayorEntity == null) return;
+
+        if(villageChunkId == null) {
+            manager.designateVillage(mayorEntity);
             return;
         }
+
+        if(manager.mayorEntities.containsKey(mayorEntity)) {
+            manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
+            Mayor mayor = manager.getMayor(villageChunkId);
+            if (mayor != null) mayor.syncData(mayorEntity);
+            return;
+        }
+
         manager.resolveMayorEntity(villageChunkId, mayorEntity.getPendingMayorData(), mayorEntity);
+        manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
+    }
+
+    /**
+     * A Mayor was placed into the world without a village, from a spawn egg or a command.
+     * The chunk it stands in becomes a designated village chunk and the entity is bound
+     * to a Mayor so it starts trading on the next trade tick.
+     */
+    private void designateVillage(MayorEntity mayorEntity)
+    {
+        BlockPos origin = mayorEntity.blockPosition();
+        ChunkPos pos = new ChunkPos(origin);
+
+        VillageEconomyChunk village = villages.get(pos);
+        if (village == null) {
+            village = new VillageEconomyChunk(level, origin);
+            villages.put(pos, village);
+            LoggerProject.logInfo(CLASS_ID + "008", "Designated village chunk " + village.getId()
+                + " from a placed Mayor");
+        }
+
+        Mayor mayor = village.adoptMayor(mayorEntity);
+        if (mayor == null) return;
+
+        mayorEntities.put(mayorEntity, origin);
+        villagesWithDeadOrLostMayors.remove(pos);
     }
 
 

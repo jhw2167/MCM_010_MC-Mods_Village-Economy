@@ -13,6 +13,7 @@ import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -90,6 +91,22 @@ public class ModConfig {
     public List<VillagePersonality> getPersonalitiesForBiome(ResourceLocation biome) {
         return economyConfig.getPersonalities().stream()
             .filter(p -> p.allowsBiome(biome)).toList();
+    }
+
+    /** Personalities with no biome whitelist, ie the temperments drawn for any village **/
+    public List<VillagePersonality> getTempermentPersonalities() {
+        return economyConfig.getPersonalities().stream()
+            .filter(p -> p.getBiomeWhiteList().isEmpty()).toList();
+    }
+
+    /** The biome descriptor personality whose whitelist explicitly covers this biome **/
+    @Nullable
+    public VillagePersonality getBiomePersonality(ResourceLocation biome) {
+        if (biome == null) return null;
+        for (VillagePersonality p : economyConfig.getPersonalities()) {
+            if (p.getBiomeWhiteList().contains(biome) && p.allowsBiome(biome)) return p;
+        }
+        return null;
     }
 
     public List<EconomyResource> getLuxuriesForBiome(ResourceLocation biome) {

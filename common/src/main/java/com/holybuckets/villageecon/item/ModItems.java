@@ -2,21 +2,18 @@ package com.holybuckets.villageecon.item;
 
 
 import com.holybuckets.villageecon.Constants;
-import com.holybuckets.villageecon.block.ModBlocks;
 import net.blay09.mods.balm.api.DeferredObject;
 import net.blay09.mods.balm.api.item.BalmItems;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 
 public class ModItems {
-    public static DeferredObject<CreativeModeTab> creativeModeTab;
-    public static Item emptyBlockItem;
+
+    public static DeferredObject<Item> mayorSpawnEgg;
 
     public static void initialize(BalmItems items) {
-        //items.registerItem(() -> emptyBlockItem = new EmptyBlockItem(items.itemProperties()), id("empty_block"));
-        creativeModeTab = items.registerCreativeModeTab(id(Constants.MOD_ID), () -> new ItemStack(ModBlocks.templateBlock));
+        mayorSpawnEgg = items.registerItem(rl -> new MayorSpawnEggItem(), id("mayor_spawn_egg"),
+            com.holybuckets.foundation.item.ModItems.FOUNDATIONS_TAB);
     }
 
     private static ResourceLocation id(String name) {

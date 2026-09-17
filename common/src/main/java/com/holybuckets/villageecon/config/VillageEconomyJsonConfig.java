@@ -346,21 +346,169 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         config.luxuries.put(GOLD.getResourceId(), GOLD);
         config.luxuries.put(CAKE.getResourceId(), CAKE);
 
-        //Personalities - at most 1 per village, permanent
-        VillagePersonality GREEDY = new VillagePersonality("greedy", 2f, 1.5f);
-        GREEDY.putDemandModifier("iron_ingot", 1f);
-        GREEDY.putDemandModifier("gold_ingot", 1.2f);
-        GREEDY.putProductionModifier("iron_ingot", 0.5f);
+        addPersonalities(config);
 
-        VillagePersonality LIKES_WOOD = new VillagePersonality("likes_wood", 1f, 1f);
-        LIKES_WOOD.putDemandModifier("oak_log", 1.5f);
-        LIKES_WOOD.putProductionModifier("oak_log", 2f);
-        LIKES_WOOD.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation("forest"));
-        LIKES_WOOD.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation("cherry_grove"));
-        LIKES_WOOD.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation("birch_forest"));
+        return config;
+    }
 
-        config.personalityModifiers.put(GREEDY.getId(), GREEDY);
-        config.personalityModifiers.put(LIKES_WOOD.getId(), LIKES_WOOD);
+
+    private static void biomes(VillagePersonality p, String... biomes) {
+        for (String biome : biomes)
+            p.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation(biome));
+    }
+
+    //Different classifications of personalities
+    // production - only modifies production
+    // demand - only modifies demand
+    // biome - has demand and production modifiers based on what we would expect for the biome its in, these should be general descriptors like "desert, forest, wet, coastal, barren, cliffside, arable, magical"
+    // temperment - list of greedy, generous, industrious, lazy, competitive, wise, foolish, friendly, strong, weak, artistic, musical, workmanlike, noble,
+    private static void addPersonalities(VillageEconomyJsonConfig config) {
+        addBiomePersonalities(config);
+        addTempermentPersonalities(config);
+    }
+
+    private static void addBiomePersonalities(VillageEconomyJsonConfig config)
+    {
+        VillagePersonality DESERT = personality(config, "desert", 1.15f, 1.05f, 0.45f);
+        DESERT.putTypeProductionStage(ResourceType.STAPLE, -1);
+        DESERT.putTypeDemandStage(ResourceType.STAPLE, 1);
+        DESERT.putProductionModifier("bread", 0.6f);
+        DESERT.putProductionModifier("oak_log", 0.4f);
+        DESERT.putDemandModifier("oak_log", 1.4f);
+        biomes(DESERT, "desert", "badlands", "wooded_badlands", "eroded_badlands");
+
+        VillagePersonality FOREST = personality(config, "forest", 0.95f, 1f, 0.55f);
+        FOREST.putTypeProductionStage(ResourceType.STAPLE, 1);
+        FOREST.putProductionModifier("oak_log", 1.2f);
+        FOREST.putDemandModifier("oak_log", 0.6f);
+        FOREST.putDemandModifier("iron_ingot", 1.2f);
+        biomes(FOREST, "forest", "birch_forest", "old_growth_birch_forest", "dark_forest",
+            "flower_forest", "taiga", "old_growth_pine_taiga", "old_growth_spruce_taiga", "jungle");
+
+        VillagePersonality WET = personality(config, "wet", 0.9f, 0.95f, 0.6f);
+        WET.putTypeProductionStage(ResourceType.BASIC, -1);
+        WET.putTypeDemandStage(ResourceType.BASIC, 1);
+        WET.putProductionModifier("bread", 1.2f);
+        WET.putProductionModifier("oak_log", 1.2f);
+        biomes(WET, "swamp", "mangrove_swamp", "river", "frozen_river", "lush_caves");
+
+        VillagePersonality COASTAL = personality(config, "coastal", 1.1f, 1.15f, 0.7f);
+        COASTAL.putTypeProductionStage(ResourceType.LUXURY, 1);
+        COASTAL.putTypeDemandStage(ResourceType.LUXURY, 1);
+        COASTAL.putProductionModifier("bread", 1.1f);
+        COASTAL.putDemandModifier("gold_ingot", 1.3f);
+        biomes(COASTAL, "beach", "snowy_beach", "stony_shore");
+
+        VillagePersonality BARREN = personality(config, "barren", 1.2f, 1f, 0.4f);
+        BARREN.putTypeProductionStage(ResourceType.STAPLE, -1);
+        BARREN.putTypeProductionStage(ResourceType.BASIC, 1);
+        BARREN.putTypeDemandStage(ResourceType.STAPLE, 1);
+        BARREN.putProductionModifier("iron_ingot", 1.2f);
+        BARREN.putProductionModifier("bread", 0.6f);
+        BARREN.putDemandModifier("bread", 1.4f);
+        biomes(BARREN, "stony_peaks", "jagged_peaks", "frozen_peaks", "snowy_slopes",
+            "windswept_gravelly_hills", "ice_spikes");
+
+        VillagePersonality CLIFFSIDE = personality(config, "cliffside", 1.3f, 1.1f, 0.3f);
+        CLIFFSIDE.putTypeProductionStage(ResourceType.BASIC, 1);
+        CLIFFSIDE.putTypeDemandStage(ResourceType.STAPLE, 1);
+        biomes(CLIFFSIDE, "windswept_hills", "windswept_forest", "grove", "meadow");
+
+        VillagePersonality ARABLE = personality(config, "arable", 0.9f, 1f, 0.65f);
+        ARABLE.putTypeProductionStage(ResourceType.STAPLE, 1);
+        ARABLE.putTypeDemandStage(ResourceType.LUXURY, 1);
+        ARABLE.putProductionModifier("bread", 1.2f);
+        ARABLE.putDemandModifier("bread", 0.5f);
+        ARABLE.putDemandModifier("gold_ingot", 1.2f);
+        biomes(ARABLE, "plains", "sunflower_plains", "savanna", "savanna_plateau", "cherry_grove");
+
+        VillagePersonality MAGICAL = personality(config, "magical", 1.25f, 1.3f, 0.5f);
+        MAGICAL.putTypeProductionStage(ResourceType.LUXURY, 2);
+        MAGICAL.putTypeProductionStage(ResourceType.STAPLE, -1);
+        MAGICAL.putTypeDemandStage(ResourceType.BASIC, 1);
+        MAGICAL.putProductionModifier("cake", 1.2f);
+        MAGICAL.putDemandModifier("iron_ingot", 1.3f);
+        biomes(MAGICAL, "mushroom_fields", "deep_dark", "dripstone_caves");
+    }
+
+    private static void addTempermentPersonalities(VillageEconomyJsonConfig config)
+    {
+        VillagePersonality GREEDY = personality(config, "greedy", 2f, 1.5f, 0.15f);
+        GREEDY.putTypeDemandStage(ResourceType.LUXURY, 1);
+        GREEDY.putDemandModifier("gold_ingot", 1.4f);
+
+        VillagePersonality GENEROUS = personality(config, "generous", 0.7f, 0.9f, 0.9f);
+        GENEROUS.putTypeDemandStage(ResourceType.LUXURY, -1);
+        GENEROUS.putTypeProductionStage(ResourceType.STAPLE, 1);
+
+        VillagePersonality INDUSTRIOUS = personality(config, "industrious", 1f, 1.1f, 0.6f);
+        INDUSTRIOUS.putTypeProductionStage(ResourceType.STAPLE, 1);
+        INDUSTRIOUS.putTypeProductionStage(ResourceType.BASIC, 1);
+
+        VillagePersonality LAZY = personality(config, "lazy", 1.05f, 0.9f, 0.75f);
+        LAZY.putTypeProductionStage(ResourceType.STAPLE, -1);
+        LAZY.putTypeProductionStage(ResourceType.BASIC, -1);
+        LAZY.putTypeDemandStage(ResourceType.STAPLE, 1);
+
+        VillagePersonality COMPETITIVE = personality(config, "competitive", 1.3f, 1.2f, 0.25f);
+        COMPETITIVE.putTypeProductionStage(ResourceType.BASIC, 1);
+        COMPETITIVE.putTypeDemandStage(ResourceType.BASIC, 1);
+        COMPETITIVE.putTypeDemandStage(ResourceType.LUXURY, 1);
+
+        VillagePersonality WISE = personality(config, "wise", 1.1f, 1.25f, 0.55f);
+        WISE.putTypeProductionStage(ResourceType.LUXURY, 1);
+        WISE.putTypeDemandStage(ResourceType.STAPLE, -1);
+
+        VillagePersonality FOOLISH = personality(config, "foolish", 0.85f, 0.75f, 0.95f);
+        FOOLISH.putTypeProductionStage(ResourceType.BASIC, -1);
+        FOOLISH.putTypeDemandStage(ResourceType.LUXURY, 2);
+
+        VillagePersonality FRIENDLY = personality(config, "friendly", 0.8f, 1f, 0.95f);
+        FRIENDLY.putTypeProductionStage(ResourceType.STAPLE, 1);
+
+        VillagePersonality STRONG = personality(config, "strong", 1.05f, 1f, 0.5f);
+        STRONG.putTypeProductionStage(ResourceType.BASIC, 1);
+        STRONG.putProductionModifier("oak_log", 1.2f);
+
+        VillagePersonality WEAK = personality(config, "weak", 0.95f, 0.95f, 0.8f);
+        WEAK.putTypeProductionStage(ResourceType.BASIC, -1);
+        WEAK.putTypeDemandStage(ResourceType.BASIC, 1);
+        WEAK.putDemandModifier("iron_ingot", 1.4f);
+
+        VillagePersonality ARTISTIC = personality(config, "artistic", 1.2f, 1f, 0.6f);
+        ARTISTIC.putTypeProductionStage(ResourceType.LUXURY, 2);
+        ARTISTIC.putTypeProductionStage(ResourceType.STAPLE, -1);
+        ARTISTIC.putTypeDemandStage(ResourceType.LUXURY, 1);
+        ARTISTIC.putProductionModifier("cake", 1.2f);
+
+        VillagePersonality MUSICAL = personality(config, "musical", 1.15f, 1f, 0.85f);
+        MUSICAL.putTypeProductionStage(ResourceType.LUXURY, 1);
+        MUSICAL.putTypeDemandStage(ResourceType.LUXURY, 1);
+
+        VillagePersonality WORKMANLIKE = personality(config, "workmanlike", 1f, 1.05f, 0.7f);
+        WORKMANLIKE.putTypeProductionStage(ResourceType.STAPLE, 1);
+        WORKMANLIKE.putTypeProductionStage(ResourceType.BASIC, 1);
+        WORKMANLIKE.putTypeProductionStage(ResourceType.LUXURY, -1);
+        WORKMANLIKE.putTypeDemandStage(ResourceType.LUXURY, -1);
+
+        VillagePersonality NOBLE = personality(config, "noble", 1.45f, 1.3f, 0.35f);
+        NOBLE.putTypeProductionStage(ResourceType.LUXURY, 1);
+        NOBLE.putTypeDemandStage(ResourceType.LUXURY, 1);
+        NOBLE.putProductionModifier("gold_ingot", 1.2f);
+        NOBLE.putDemandModifier("gold_ingot", 1.35f);
+    }
+
+        private static VillagePersonality personality(VillageEconomyJsonConfig config, String id,
+                                                      float markup, float interestModifier, float agreeableness)
+        {
+            VillagePersonality p = new VillagePersonality(id, markup, interestModifier);
+            p.setAgreeableness(agreeableness);
+            config.personalityModifiers.put(p.getId(), p);
+            return p;
+        }
+
+
+    private static void addCycleModifiers(VillageEconomyJsonConfig config) {
 
         //Cycle modifiers - 1 drawn per village per cycle, additive with personality
         CycleModifier NONE = new CycleModifier(CycleModifier.NONE_ID, "none", 50);
@@ -376,6 +524,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         config.cycleModifiers.put(DROUGHT.getId(), DROUGHT);
         config.cycleModifiers.put(GOLD_RUSH.getId(), GOLD_RUSH);
 
-        return config;
     }
+
 }

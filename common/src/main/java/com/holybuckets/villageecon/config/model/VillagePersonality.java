@@ -30,6 +30,8 @@ public class VillagePersonality {
     private float agreeableness;            //0..1 haggling disposition: 1 accepts any profitable trade, 0 demands full expected profit
     private final Map<String, Float> resourceDemandModifiers = new LinkedHashMap<>();
     private final Map<String, Float> resourceProductionModifiers = new LinkedHashMap<>();
+    private final Map<String, Float> typeDemandModifiers = new LinkedHashMap<>();
+    private final Map<String, Float> typeProductionModifiers = new LinkedHashMap<>();
     private final Set<ResourceLocation> biomeWhiteList = new HashSet<>();
     private final Set<ResourceLocation> biomeBlackList = new HashSet<>();
 
@@ -70,9 +72,35 @@ public class VillagePersonality {
         return resourceProductionModifiers.getOrDefault(resourceId, 1f);
     }
 
+    /** Blanket demand bonus applied to every resource of the given class; defaults to 1 **/
+    public float getTypeDemandModifier(EconomyResource.ResourceType type) {
+        if (type == null) return 1f;
+        return typeDemandModifiers.getOrDefault(type.name(), 1f);
+    }
+
+    /** Blanket production bonus applied to every resource of the given class; defaults to 1 **/
+    public float getTypeProductionModifier(EconomyResource.ResourceType type) {
+        if (type == null) return 1f;
+        return typeProductionModifiers.getOrDefault(type.name(), 1f);
+    }
+
+    /** Item specific demand boon scaled by the blanket bonus for its resource class **/
+    public float getDemandModifier(String resourceId, EconomyResource.ResourceType type) {
+        return getDemandModifier(resourceId) * getTypeDemandModifier(type);
+    }
+
+    /** Item specific production boon scaled by the blanket bonus for its resource class **/
+    public float getProductionModifier(String resourceId, EconomyResource.ResourceType type) {
+        return getProductionModifier(resourceId) * getTypeProductionModifier(type);
+    }
+
     public Map<String, Float> getResourceDemandModifiers() { return resourceDemandModifiers; }
 
     public Map<String, Float> getResourceProductionModifiers() { return resourceProductionModifiers; }
+
+    public Map<String, Float> getTypeDemandModifiers() { return typeDemandModifiers; }
+
+    public Map<String, Float> getTypeProductionModifiers() { return typeProductionModifiers; }
 
     public Set<ResourceLocation> getBiomeWhiteList() { return biomeWhiteList; }
 
@@ -126,6 +154,57 @@ public class VillagePersonality {
         putModifier(resourceProductionModifiers, resourceId, value, "resourceProductionModifiers");
     }
 
+    /**
+     * Converts a whole stage into its production factor. Stages move in half steps
+     * above the base production value and quarter steps below it:
+     * -3 or lower = 0%, -2 = 25%, -1 = 50%, 0 = no effect, 1 = 150%, 2 = 200%, 3 = 250%
+     */
+    public static float stageFactor(int stage) {
+        if (stage >= 0) return 1f + 0.5f * stage;
+        if (stage == -1) return 0.5f;
+        if (stage == -2) return 0.25f;
+        return 0f;
+    }
+
+    public void putTypeDemandStage(EconomyResource.ResourceType type, int stage) {
+        putTypeDemandModifier(type, stageFactor(stage));
+    }
+
+    public void putTypeProductionStage(EconomyResource.ResourceType type, int stage) {
+        putTypeProductionModifier(type, stageFactor(stage));
+    }
+
+    public void putTypeDemandModifier(EconomyResource.ResourceType type, Float value) {
+        if (type == null) return;
+        putModifier(typeDemandModifiers, type.name(), value, "typeDemandModifiers");
+    }
+
+    public void putTypeProductionModifier(EconomyResource.ResourceType type, Float value) {
+        if (type == null) return;
+        putModifier(typeProductionModifiers, type.name(), value, "typeProductionModifiers");
+    }
+
+    public void putTypeDemandModifier(String typeName, Float value) {
+        EconomyResource.ResourceType type = parseType(typeName, "typeDemandModifiers");
+        if (type != null) putTypeDemandModifier(type, value);
+    }
+
+    public void putTypeProductionModifier(String typeName, Float value) {
+        EconomyResource.ResourceType type = parseType(typeName, "typeProductionModifiers");
+        if (type != null) putTypeProductionModifier(type, value);
+    }
+
+    private EconomyResource.ResourceType parseType(String typeName, String property) {
+        if (typeName == null) return null;
+        try {
+            return EconomyResource.ResourceType.valueOf(typeName.trim().toUpperCase());
+        } catch (Exception e) {
+            LoggerProject.logWarning(CLASS_ID + "010", "Unknown resource class '" + typeName
+                + "' in " + property + " for personality: " + id + ". Expected staple, basic or luxury");
+            return null;
+        }
+    }
+
     private void putModifier(Map<String, Float> target, String resourceId, Float value, String property) {
         if (value == null || value < 0) {
             LoggerProject.logWarning(CLASS_ID + "007", "Invalid value in " + property + " for personality: " + id
@@ -150,6 +229,11 @@ public class VillagePersonality {
         obj.add("resourceDemandModifiers", serializeModifierMap(resourceDemandModifiers));
         obj.add("resourceProductionModifiers", serializeModifierMap(resourceProductionModifiers));
 
+        if (!typeDemandModifiers.isEmpty())
+            obj.add("typeDemandModifiers", serializeTypeMap(typeDemandModifiers));
+        if (!typeProductionModifiers.isEmpty())
+            obj.add("typeProductionModifiers", serializeTypeMap(typeProductionModifiers));
+
         if (!biomeWhiteList.isEmpty()) {
             com.google.gson.JsonArray whitelist = new com.google.gson.JsonArray();
             biomeWhiteList.forEach(b -> whitelist.add(b.toString()));
@@ -166,6 +250,12 @@ public class VillagePersonality {
     static JsonObject serializeModifierMap(Map<String, Float> map) {
         JsonObject obj = new JsonObject();
         map.forEach(obj::addProperty);
+        return obj;
+    }
+
+    static JsonObject serializeTypeMap(Map<String, Float> map) {
+        JsonObject obj = new JsonObject();
+        map.forEach((key, value) -> obj.addProperty(key.toLowerCase(), value));
         return obj;
     }
 
@@ -202,6 +292,8 @@ public class VillagePersonality {
 
         deserializeModifierMap(obj, "resourceDemandModifiers", personality::putDemandModifier, id);
         deserializeModifierMap(obj, "resourceProductionModifiers", personality::putProductionModifier, id);
+        deserializeModifierMap(obj, "typeDemandModifiers", personality::putTypeDemandModifier, id);
+        deserializeModifierMap(obj, "typeProductionModifiers", personality::putTypeProductionModifier, id);
 
         EconomyResource.parseBiomeList(obj, "biomeWhiteList", personality.biomeWhiteList, "personality: " + id);
         EconomyResource.parseBiomeList(obj, "biomeBlackList", personality.biomeBlackList, "personality: " + id);

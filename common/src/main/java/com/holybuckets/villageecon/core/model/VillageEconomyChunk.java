@@ -103,6 +103,19 @@ public class VillageEconomyChunk implements IMangedChunkData {
         determineLuxuryResources();
     }
 
+    /** Designates a chunk as a village without a source structure, ie a placed Mayor **/
+    public VillageEconomyChunk(ServerLevel level, BlockPos origin) {
+        this();
+        this.level = level;
+        this.origin = origin;
+        this.pos = new ChunkPos(origin);
+        this.id = ChunkUtil.getId(pos);
+        this.structureLoc = null;
+
+        setModifiers();
+        determineLuxuryResources();
+    }
+
 
     /** Getters **/
 
@@ -185,17 +198,17 @@ public class VillageEconomyChunk implements IMangedChunkData {
     {
         ResourceLocation biome = getBiome();
 
-        //Personality: random draw among biome-eligible personalities, permanent
-        List<VillagePersonality> eligible = MOD_CONFIG.getPersonalitiesForBiome(biome);
-        if (eligible.isEmpty()) {
+        List<VillagePersonality> temperments = MOD_CONFIG.getTempermentPersonalities();
+        if (temperments.isEmpty()) {
             this.personalityModifier = NEUTRAL;
         } else {
-            this.personalityModifier = eligible.get(RANDOM.nextInt(eligible.size()));
+            this.personalityModifier = temperments.get(RANDOM.nextInt(temperments.size()));
         }
         this.personalityModifierId = personalityModifier.getId();
 
-        this.biomeModifier = NEUTRAL;
-        this.biomeModifierId = (biome != null) ? biome.toString() : NEUTRAL.getId();
+        VillagePersonality biomePersonality = MOD_CONFIG.getBiomePersonality(biome);
+        this.biomeModifier = (biomePersonality != null) ? biomePersonality : NEUTRAL;
+        this.biomeModifierId = this.biomeModifier.getId();
     }
 
     private void determineLuxuryResources()
@@ -243,6 +256,30 @@ public class VillageEconomyChunk implements IMangedChunkData {
         LoggerProject.logInfo(CLASS_ID + "001", "Mayor created for village " + id
             + " with personality '" + personalityModifierId + "' and biome modifier '" + biomeModifierId + "'");
         return mayor;
+    }
+
+    /**
+     * Binds an already spawned Mayor entity to this village, reusing the RAM resident
+     * Mayor when one exists. Used when a Mayor is placed rather than spawned by us.
+     */
+    public Mayor adoptMayor(MayorEntity mayorEntity)
+    {
+        if (level == null || mayorEntity == null) return null;
+
+        VillageManager manager = VillageManager.get(level);
+        if (manager == null) return null;
+
+        Mayor existing = manager.getMayor(pos);
+        this.mayor = (existing != null) ? existing : new Mayor(level, this);
+        this.mayor.attachEntity(mayorEntity);
+
+        mayorEntity.setVillageChunkId(this.id);
+        this.mayorId = mayorEntity.getUUID();
+        manager.registerMayor(this.mayor);
+
+        LoggerProject.logInfo(CLASS_ID + "002", "Mayor adopted for village " + id
+            + " with personality '" + personalityModifierId + "' and biome modifier '" + biomeModifierId + "'");
+        return this.mayor;
     }
 
     @Nullable

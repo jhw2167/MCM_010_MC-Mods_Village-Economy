@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "hbs_village_econ:item/mayor_spawn_egg"
+  }
+}

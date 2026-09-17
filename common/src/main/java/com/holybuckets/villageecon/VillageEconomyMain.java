@@ -4,7 +4,9 @@ package com.holybuckets.villageecon;
 import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.VillageEconConfig;
+import com.holybuckets.villageecon.command.CommandList;
 import com.holybuckets.villageecon.core.VillageManager;
+import com.holybuckets.villageecon.core.debug.VillageEconTradeSimulator;
 import com.holybuckets.villageecon.core.trade.Bazaar;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
@@ -35,6 +37,8 @@ public class VillageEconomyMain {
         ModConfig.init(registrar);
         VillageManager.init(registrar);
         Bazaar.init(registrar);
+        VillageEconTradeSimulator.init(registrar);
+        CommandList.register();
 
 
         //register local events

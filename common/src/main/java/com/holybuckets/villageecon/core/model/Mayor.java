@@ -206,17 +206,24 @@ public class Mayor {
 
     //** Modifiers **//
 
+    private static ResourceType resourceType(String resourceId) {
+        EconomyResource resource = ModConfig.getInstance().getResource(resourceId);
+        return (resource != null) ? resource.getType() : null;
+    }
+
     public float favoribility(String resourceId) {
-        float b = personalityModifier.getDemandModifier(resourceId)
-            + biomeModifier.getDemandModifier(resourceId)
+        ResourceType type = resourceType(resourceId);
+        float b = personalityModifier.getDemandModifier(resourceId, type)
+            + biomeModifier.getDemandModifier(resourceId, type)
             + cycleModifier().getDemandModifier(resourceId)
             - 2f;
         return Math.max(0f, Math.min(2f, b));
     }
 
     public float productionModifier(String resourceId) {
-        float m = personalityModifier.getProductionModifier(resourceId)
-            + biomeModifier.getProductionModifier(resourceId)
+        ResourceType type = resourceType(resourceId);
+        float m = personalityModifier.getProductionModifier(resourceId, type)
+            + biomeModifier.getProductionModifier(resourceId, type)
             + cycleModifier().getProductionModifier(resourceId)
             - 2f;
         return Math.max(0f, m);
