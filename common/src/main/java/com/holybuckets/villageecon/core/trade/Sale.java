@@ -15,13 +15,13 @@ public class Sale {
 
     private final Mayor seller;
     private final Mayor buyer;
-    private final int salePrice;        //per unit
+    private final float salePrice;      //per unit
     private final int saleQuantity;
     private final long saleTime;        //game time (ticks) the sale occurred
     private final Item resource;
     private final String resourceId;    //economy config resource id, for ledger keys
 
-    public Sale(Mayor seller, Mayor buyer, int salePrice, int saleQuantity,
+    public Sale(Mayor seller, Mayor buyer, float salePrice, int saleQuantity,
                 long saleTime, Item resource, String resourceId) {
         this.seller = seller;
         this.buyer = buyer;
@@ -36,7 +36,7 @@ public class Sale {
 
     public Mayor getBuyer() { return buyer; }
 
-    public int getSalePrice() { return salePrice; }
+    public float getSalePrice() { return salePrice; }
 
     public int getSaleQuantity() { return saleQuantity; }
 
@@ -48,7 +48,7 @@ public class Sale {
 
     @Override
     public String toString() {
-        return String.format("Sale[%s x%d @ %d, %s -> %s, t=%d]",
+        return String.format("Sale[%s x%d @ %.2f, %s -> %s, t=%d]",
             resourceId, saleQuantity, salePrice,
             seller != null ? seller.getVillageChunkId() : "?",
             buyer != null ? buyer.getVillageChunkId() : "?", saleTime);

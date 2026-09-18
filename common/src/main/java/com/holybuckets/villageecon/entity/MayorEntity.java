@@ -60,6 +60,7 @@ public class MayorEntity extends Villager {
     public void tick() {
         super.tick();
         if (this.level().isClientSide()) return;
+        if (villageChunkId == null) return;
         if (++count < TOTAL_TICKS) return;
             count = 0;
         VillageManager.mayorEntityAdded(this.level(), villageChunkId, this);
@@ -119,7 +120,13 @@ public class MayorEntity extends Villager {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         if (villageChunkId != null) tag.putString(NBT_VILLAGE_CHUNK_ID, villageChunkId);
-        else if (pendingMayorData != null) tag.put(NBT_MAYOR, pendingMayorData);
+
+        CompoundTag mayorData = pendingMayorData;
+        if (!this.level().isClientSide() && villageChunkId != null) {
+            Mayor mayor = Mayor.getMayor(this.level(), villageChunkId);
+            if (mayor != null) mayorData = mayor.serializeNBT();
+        }
+        if (mayorData != null) tag.put(NBT_MAYOR, mayorData);
     }
 
     @Override

@@ -1,5 +1,11 @@
 package com.holybuckets.villageecon.core;
 
+import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.villageecon.config.ModConfig;
+import com.holybuckets.villageecon.config.VillageEconConfig;
+import com.holybuckets.villageecon.config.VillageEconomyJsonConfig;
+import com.holybuckets.villageecon.config.model.EconomyResource;
+
 /**
  * Class: EconomyMath
  * Description: PLACEHOLDER. Stateless static functions implementing the economy equations
@@ -11,17 +17,38 @@ package com.holybuckets.villageecon.core;
 public class EconomyMath {
 
     public static final String CLASS_ID = "017";
+    private static GeneralConfig CONFIG;
 
-    private EconomyMath() { }
+    private static EconomyMath INSTANCE;
+    private MarketState market;
+    private ModConfig modConfig;
+    private VillageEconomyJsonConfig eConfig;
+
+    private EconomyMath(MarketState market) {
+        this.market = market;
+        this.modConfig = ModConfig.getInstance();
+        this.eConfig = modConfig.getEconomyConfig();
+    }
+
+     static void init(MarketState market) {
+            INSTANCE = new EconomyMath(market);
+     }
+
+    public static int quota(int level, EconomyResource resource) {
+        if(level >= VillageEconConfig.MAX_VILLAGE_LEVEL ) return 0;
+        return 2 * resource.productionAt(level + 1);
+    }
 
     /**
      * Fraction of resource quota reached: q_j = s_j / (2 * rho_{j, L+1})
      * @param supply s_j - current supply of the resource
-     * @param nextLevelProduction rho_{j, L+1} - base production of the resource at the next village level
+     * @param level L - current village level
      */
-    public static float quotaFraction(int supply, int nextLevelProduction) {
-        if (nextLevelProduction <= 0) return 0f;
-        return supply / (2f * nextLevelProduction);
+    public static float quotaFraction(int level, int supply,  EconomyResource resource) {
+        if(level >= VillageEconConfig.MAX_VILLAGE_LEVEL ) return 0f;
+        float resourceQuota = quota(level, resource);
+        if(resourceQuota <= 0f) return 0f;
+        return Math.min(1f, supply / resourceQuota);
     }
 
     /**
@@ -29,8 +56,8 @@ public class EconomyMath {
      * P_j = C*I + (1 - z*q_j)*(s*b*D)_j + floor(q_j)*r_j
      * TODO: implement when MarketState provides real market rates
      */
-    public static float profit(float currency, float interestRate, float dampening,
-        float quotaFraction, int supply, float favoribility, float marketRate, float growthReward) {
+    public static float profit(float currency, float interestRate, float quotaFraction,
+         int supply, float favoribility, float marketRate, float growthReward) {
         //TODO
         return 0f;
     }
@@ -38,24 +65,41 @@ public class EconomyMath {
     /**
      * Marginal demand village i places on one more unit of resource j:
      * d_ij = del(C)*I + (1 - z*q_j)*(del(s)*b*D) + del(s)*r/q
-     * Accounts for interest delta, market value delta, and average (non-floored)
-     * quota bonus per unit.
-     * TODO: implement when MarketState provides real market rates
      */
-    public static float marginalDemand(float interestRate, float dampening, float quotaFraction,
-        float favoribility, float marketRate, float growthReward) {
-        //TODO
-        return 0f;
+    public static float margDemSale(int vLevel, int s, float interest, float quotaFrct, float favor, EconomyResource resource) {
+
+        float growthRate = INSTANCE.eConfig.getGrowthFactor();
+        float z = INSTANCE.eConfig.getDemandDampeningFactor();
+        float mrkRt = INSTANCE.market.getMarketRate(resource);
+
+        float gainedInterest = s * mrkRt * interest;
+        double lostMarketValue =  Math.exp(-z*quotaFrct) * (s * favor * mrkRt);
+
+        float minQuotaFraction = quotaFraction(vLevel, 1, resource);
+        float weightedQuotaFrct = (minQuotaFraction*growthRate + quotaFrct ) / (growthRate + 1);
+        float lostQuotaBonus = -s*growthReward()*weightedQuotaFrct;
+        return gainedInterest + (float) lostMarketValue + lostQuotaBonus;
     }
 
-    /**
-     * Economic growth factor reward: R_ij = SUM(C)*(growthFactor) / (V*T)
-     * @param totalCurrency SUM(C) over all villages
-     * @param villageCount V - total villages discovered so far
-     * @param resourcesTraded T - total resources each village is trading
-     */
-    public static float growthReward(float totalCurrency, float growthFactor, int villageCount, int resourcesTraded) {
-        if (villageCount <= 0 || resourcesTraded <= 0) return 0f;
-        return totalCurrency * growthFactor / (villageCount * resourcesTraded);
+    public static float margDemBuy(int vLevel, int s, float interest, float quotaFrct, float favor, EconomyResource resource) {
+        float growthRate = INSTANCE.eConfig.getGrowthFactor();
+        float z = INSTANCE.eConfig.getDemandDampeningFactor();
+        float mrkRt = INSTANCE.market.getMarketRate(resource);
+
+        float lostInterest = -s * mrkRt * interest;
+        double gainedMarketValue =  Math.exp(-z*quotaFrct) * (s * favor * mrkRt);
+
+        float minQuotaFraction = quotaFraction(vLevel, 1, resource);
+        float weightedQuotaFrct = (minQuotaFraction*growthRate + quotaFrct ) / (growthRate + 1);
+        float gainedQuotaBonus = s * growthReward() * weightedQuotaFrct;
+        return lostInterest + (float) gainedMarketValue + gainedQuotaBonus;
+    }
+
+    public static float growthReward() {
+        float totalCurrency = MarketState.totalCurrency();
+        float growthFactor = INSTANCE.eConfig.getGrowthFactor();
+        int totalResourcesTraded = INSTANCE.market.getTotalResourceTrades();
+        if (totalResourcesTraded <= 0) return 0f;
+        return (totalCurrency * growthFactor) / totalResourcesTraded;
     }
 }

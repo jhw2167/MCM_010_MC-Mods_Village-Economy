@@ -67,6 +67,19 @@ public class ModConfig {
         return economyConfig;
     }
 
+    public float getStartingReserveCurrency(int villageLevel) {
+        float base = getDefaults().startingReserveCurrency;
+        if (base <= 0f) return 0f;
+
+        float growthFactor = (economyConfig != null)
+            ? economyConfig.getGrowthFactor()
+            : getDefaults().growthFactor;
+        if (growthFactor <= 0f) return base;
+
+        int steps = villageLevel - VillageEconConfig.STARTING_VILLAGE_LEVEL;
+        return base * (float) Math.pow(growthFactor, steps);
+    }
+
     public Collection<EconomyResource> getResources(ResourceType type) {
         return economyConfig.getResources(type);
     }
@@ -84,6 +97,10 @@ public class ModConfig {
         return economyConfig.getPersonalities();
     }
 
+    public VillagePersonality getVillagePersonality(String id) {
+        return economyConfig.getPersonality(id);
+    }
+
     public Collection<CycleModifier> getCycleModifiers() {
         return economyConfig.getCycleModifiers();
     }
@@ -93,13 +110,11 @@ public class ModConfig {
             .filter(p -> p.allowsBiome(biome)).toList();
     }
 
-    /** Personalities with no biome whitelist, ie the temperments drawn for any village **/
-    public List<VillagePersonality> getTempermentPersonalities() {
+    public List<VillagePersonality> getTemperamentPersonalities() {
         return economyConfig.getPersonalities().stream()
             .filter(p -> p.getBiomeWhiteList().isEmpty()).toList();
     }
 
-    /** The biome descriptor personality whose whitelist explicitly covers this biome **/
     @Nullable
     public VillagePersonality getBiomePersonality(ResourceLocation biome) {
         if (biome == null) return null;
@@ -174,7 +189,6 @@ public class ModConfig {
             + economyConfig.getCycleModifiers().size() + " cycle modifier(s)");
     }
 
-    /** Resolve item / tag strings against registries and prune resources with invalid items **/
     private void hydrateResources()
     {
         List<String> toRemove = new ArrayList<>();
@@ -191,7 +205,6 @@ public class ModConfig {
         toRemove.forEach(economyConfig::removeResource);
     }
 
-    /** Warn about personality / cycle modifier entries that reference unknown resources **/
     private void validateModifierReferences()
     {
         for (VillagePersonality p : economyConfig.getPersonalities()) {

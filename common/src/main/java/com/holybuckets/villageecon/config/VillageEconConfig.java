@@ -16,15 +16,17 @@ public class VillageEconConfig {
     public static final String DEF_VILLAGE_ECONOMY_CONFIG_PATH = "config/HBVillageEconomyConfig.json";
 
     public static final int MAX_VILLAGE_LEVEL = 10;
+    public static final float DEF_STARTING_RESERVE_CURRENCY = 100f;
 
     public static final float DEF_GROWTH_FACTOR = 2f;
-    public static final float DEF_DEMAND_DAMPENING_FACTOR = 2f;
+    public static final float DEF_DEMAND_DAMPENING_FACTOR = 0.5f;
     public static final float DEF_GLOBAL_INTEREST_RATE = 1.1f;
     public static final int DEF_BASIC_RESOURCE_START_LEVEL = 5;
     public static final int DEF_LUXURY_RESOURCE_START_LEVEL = 8;
     public static final int DEF_ASSIGNED_LUXURY_RESOURCE_COUNT = 2;
     public static final int DEF_CYCLE_LENGTH_DAYS = 16;
     public static final float DEF_MARKUP = 1f;
+    public static final int STARTING_VILLAGE_LEVEL = 2;
     public static final float DEF_INTEREST_MODIFIER = 1f;
     public static final float DEF_RESOURCE_MODIFIER = 1f;
     public static final int DEF_WEIGHT = 10;
@@ -55,7 +57,7 @@ public class VillageEconConfig {
         @Comment("Default growthFactor: 2. Economic growth factor, scales the bonus reward granted to each village per cycle it meets its quota. At least 1, less than 10. Overridden by the value in the economy JSON config")
         public float growthFactor = DEF_GROWTH_FACTOR;
 
-        @Comment("Default demandDampeningFactor: 2. Rate at which demand falls off as a village's needs are met. Overridden by the value in the economy JSON config")
+        @Comment("Default demandDampeningFactor: 2. Rate at which demand falls off as a village's needs are met. Higher values slow down village to village trades.")
         public float demandDampeningFactor = DEF_DEMAND_DAMPENING_FACTOR;
 
         @Comment("Default globalInterestRate: 1.1. Base daily interest rate applied to each village's reserve currency, before personality modifiers. Overridden by the value in the economy JSON config")
@@ -75,6 +77,9 @@ public class VillageEconConfig {
 
         @Comment("Default markup: 1. Markup rate applied when a village sells goods to a player, before personality modifiers")
         public float markup = DEF_MARKUP;
+
+        @Comment("Default startingReserveCurrency: 100. Reserve currency granted to a village the moment its mayor is created, awarded in full at village level index 2 (village level 3). The amount is multiplied by growthFactor once for each level index above 2 and divided by growthFactor once for each level index below")
+        public float startingReserveCurrency = DEF_STARTING_RESERVE_CURRENCY;
     }
 
     public DefaultEconomyConfigs defaultEconomyConfigs = new DefaultEconomyConfigs();

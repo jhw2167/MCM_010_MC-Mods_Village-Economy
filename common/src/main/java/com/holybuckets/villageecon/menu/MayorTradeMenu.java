@@ -132,14 +132,12 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         if (mayor == null) return offers;
 
         ResourceLedger ledger = mayor.getStaticLedger();
-        int level = mayor.getVillageLevel();
 
         for (EconomyResource resource : mayor.getActiveResources())
         {
             String id = resource.getResourceId();
-            int quota = 2 * resource.productionAt(level + 1);
             offers.add(new MayorTradeOffer(id, resource.getItem(),
-                ledger.get(id), quota, MarketState.marketRate(id)));
+                ledger.get(id), mayor.getQuota(id), MarketState.marketRate(id)));
         }
         return offers;
     }

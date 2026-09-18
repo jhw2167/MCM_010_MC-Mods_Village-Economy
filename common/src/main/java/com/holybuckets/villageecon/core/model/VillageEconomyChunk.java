@@ -84,7 +84,7 @@ public class VillageEconomyChunk implements IMangedChunkData {
     private VillageEconomyChunk() {
         super();
         this.id = DEFAULT_ID;
-        this.villageLevel = 1;
+        this.villageLevel = 2;                      //indexing starts at 0
         this.luxuryResourceIds = new ArrayList<>();
         this.personalityModifier = NEUTRAL;
         this.biomeModifier = NEUTRAL;
@@ -189,16 +189,11 @@ public class VillageEconomyChunk implements IMangedChunkData {
 
 
     //** CORE
-
-    /**
-     * Assigns the permanent state variables "personalityModifier" and "biomeModifier".
-     * Both are instances of the same modifier class and are persisted as state ids.
-     */
     private void setModifiers()
     {
         ResourceLocation biome = getBiome();
 
-        List<VillagePersonality> temperments = MOD_CONFIG.getTempermentPersonalities();
+        List<VillagePersonality> temperments = MOD_CONFIG.getTemperamentPersonalities();
         if (temperments.isEmpty()) {
             this.personalityModifier = NEUTRAL;
         } else {
@@ -248,38 +243,15 @@ public class VillageEconomyChunk implements IMangedChunkData {
 
         mayorEntity.moveTo(origin.getX() + 0.5, origin.getY() + 1, origin.getZ() + 0.5, 0, 0);
         mayorEntity.setCustomName(Component.literal("Mayor"));
+        mayorEntity.setVillageChunkId(this.id);
         level.addFreshEntity(mayorEntity);
 
         this.mayorId = mayorEntity.getUUID();
         manager.registerMayor(mayor);
 
-        LoggerProject.logInfo(CLASS_ID + "001", "Mayor created for village " + id
+        LoggerProject.logInfo("013001", "Mayor created for village " + id
             + " with personality '" + personalityModifierId + "' and biome modifier '" + biomeModifierId + "'");
         return mayor;
-    }
-
-    /**
-     * Binds an already spawned Mayor entity to this village, reusing the RAM resident
-     * Mayor when one exists. Used when a Mayor is placed rather than spawned by us.
-     */
-    public Mayor adoptMayor(MayorEntity mayorEntity)
-    {
-        if (level == null || mayorEntity == null) return null;
-
-        VillageManager manager = VillageManager.get(level);
-        if (manager == null) return null;
-
-        Mayor existing = manager.getMayor(pos);
-        this.mayor = (existing != null) ? existing : new Mayor(level, this);
-        this.mayor.attachEntity(mayorEntity);
-
-        mayorEntity.setVillageChunkId(this.id);
-        this.mayorId = mayorEntity.getUUID();
-        manager.registerMayor(this.mayor);
-
-        LoggerProject.logInfo(CLASS_ID + "002", "Mayor adopted for village " + id
-            + " with personality '" + personalityModifierId + "' and biome modifier '" + biomeModifierId + "'");
-        return this.mayor;
     }
 
     @Nullable

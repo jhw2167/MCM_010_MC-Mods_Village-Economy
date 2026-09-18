@@ -27,7 +27,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
     private int luxuryResourceStartLevel;   //village level at which luxury resources are produced
     private int assignedLuxuryResourceCount;//number of luxuries assigned to each village
 
-    /** Ordered maps preserving insertion order from the JSON arrays, keyed by id **/
     private final Map<String, EconomyResource> staples = new LinkedHashMap<>();
     private final Map<String, EconomyResource> basics = new LinkedHashMap<>();
     private final Map<String, EconomyResource> luxuries = new LinkedHashMap<>();
@@ -392,7 +391,7 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         WET.putProductionModifier("oak_log", 1.2f);
         biomes(WET, "swamp", "mangrove_swamp", "river", "frozen_river", "lush_caves");
 
-        VillagePersonality COASTAL = personality(config, "coastal", 1.1f, 1.15f, 0.7f);
+        VillagePersonality COASTAL = personality(config, "coastal", 1.1f, 1.05f, 0.7f);
         COASTAL.putTypeProductionStage(ResourceType.LUXURY, 1);
         COASTAL.putTypeDemandStage(ResourceType.LUXURY, 1);
         COASTAL.putProductionModifier("bread", 1.1f);
@@ -422,7 +421,7 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         ARABLE.putDemandModifier("gold_ingot", 1.2f);
         biomes(ARABLE, "plains", "sunflower_plains", "savanna", "savanna_plateau", "cherry_grove");
 
-        VillagePersonality MAGICAL = personality(config, "magical", 1.25f, 1.3f, 0.5f);
+        VillagePersonality MAGICAL = personality(config, "magical", 1.25f, 1.1f, 0.5f);
         MAGICAL.putTypeProductionStage(ResourceType.LUXURY, 2);
         MAGICAL.putTypeProductionStage(ResourceType.STAPLE, -1);
         MAGICAL.putTypeDemandStage(ResourceType.BASIC, 1);
@@ -433,7 +432,7 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
     private static void addTempermentPersonalities(VillageEconomyJsonConfig config)
     {
-        VillagePersonality GREEDY = personality(config, "greedy", 2f, 1.5f, 0.15f);
+        VillagePersonality GREEDY = personality(config, "greedy", 2f, 1.2f, 0.15f);
         GREEDY.putTypeDemandStage(ResourceType.LUXURY, 1);
         GREEDY.putDemandModifier("gold_ingot", 1.4f);
 
@@ -455,11 +454,11 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         COMPETITIVE.putTypeDemandStage(ResourceType.BASIC, 1);
         COMPETITIVE.putTypeDemandStage(ResourceType.LUXURY, 1);
 
-        VillagePersonality WISE = personality(config, "wise", 1.1f, 1.25f, 0.55f);
+        VillagePersonality WISE = personality(config, "wise", 1.1f, 1.15f, 0.55f);
         WISE.putTypeProductionStage(ResourceType.LUXURY, 1);
         WISE.putTypeDemandStage(ResourceType.STAPLE, -1);
 
-        VillagePersonality FOOLISH = personality(config, "foolish", 0.85f, 0.75f, 0.95f);
+        VillagePersonality FOOLISH = personality(config, "foolish", 0.85f, 0.9f, 0.95f);
         FOOLISH.putTypeProductionStage(ResourceType.BASIC, -1);
         FOOLISH.putTypeDemandStage(ResourceType.LUXURY, 2);
 
@@ -491,7 +490,7 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
         WORKMANLIKE.putTypeProductionStage(ResourceType.LUXURY, -1);
         WORKMANLIKE.putTypeDemandStage(ResourceType.LUXURY, -1);
 
-        VillagePersonality NOBLE = personality(config, "noble", 1.45f, 1.3f, 0.35f);
+        VillagePersonality NOBLE = personality(config, "noble", 1.45f, 1.1f, 0.35f);
         NOBLE.putTypeProductionStage(ResourceType.LUXURY, 1);
         NOBLE.putTypeDemandStage(ResourceType.LUXURY, 1);
         NOBLE.putProductionModifier("gold_ingot", 1.2f);

@@ -19,21 +19,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Class: EconomyResource
- * Description: Represents a single tradeable resource configuration entry (staple, basic or luxury).
- * Holds the raw JSON-backed strings and hydrates them into registry-backed types
- * (Item, TagKey) at server start via hydrate().
- *
- * production and consumption are level-indexed arrays: index i holds the base
- * production/consumption (Rho) for a village at level i+1. Arrays shorter than
- * MAX_VILLAGE_LEVEL repeat their last entry for higher levels.
- */
 public class EconomyResource {
 
     public static final String CLASS_ID = "007";
 
-    /** Resource class determines at which village level the resource is produced **/
+
     public enum ResourceType { STAPLE, BASIC, LUXURY }
 
     public static final List<Integer> DEF_PRODUCTION = List.of(16, 16, 16, 24, 32, 48, 80, 160, 320, 320);

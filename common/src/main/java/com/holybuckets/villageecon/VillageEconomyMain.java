@@ -36,7 +36,6 @@ public class VillageEconomyMain {
         EventRegistrar registrar = EventRegistrar.getInstance();
         ModConfig.init(registrar);
         VillageManager.init(registrar);
-        Bazaar.init(registrar);
         VillageEconTradeSimulator.init(registrar);
         CommandList.register();
 

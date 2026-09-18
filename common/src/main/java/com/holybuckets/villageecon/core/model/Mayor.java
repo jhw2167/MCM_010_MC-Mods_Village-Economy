@@ -23,12 +23,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 
 /**
     Mayor class handles all dynamic transactions for the village,
@@ -42,6 +37,9 @@ public class Mayor {
 
     public static final String CLASS_ID = "015";
 
+    //Buffer below which a trade is not worth posting, in units of currency
+    public static final float NEGLIGIBLE_DEMAND = 1f;
+
     private final ServerLevel level;
     private MayorEntity entity;
     private UUID villagerId;
@@ -53,6 +51,7 @@ public class Mayor {
     private String personalityModifierId;
     private String biomeModifierId;
     private List<String> luxuryResourceIds = new ArrayList<>();
+    private static ModConfig modConfig;
 
     private VillagePersonality personalityModifier = VillageEconomyChunk.NEUTRAL;
     private VillagePersonality biomeModifier = VillageEconomyChunk.NEUTRAL;
@@ -62,21 +61,34 @@ public class Mayor {
     private final ResourceLedger theoLedger = new ResourceLedger();
     private CycleModifier currentCycleModifier;
     private final Map<String, Float> demand = new LinkedHashMap<>();  //d_ij - marginal demand per resource this tick
+    private final Set<EconomyResource> tradedResources = new HashSet<>();
 
     //** Constructors **//
-
-    public Mayor(ServerLevel level) {
+    private Mayor(ServerLevel level) {
         this.level = level;
     }
 
-    public Mayor(ServerLevel level, VillageEconomyChunk village) {
+    public Mayor(ServerLevel level, CompoundTag tag) {
         this(level);
+        deserializeNBT(tag);
+        this.addTradedResources();
+    }
+
+    public Mayor(ServerLevel level, VillageEconomyChunk village) {
+        this(level, (CompoundTag) null);
         this.villageChunkId = village.getId();
         this.villageLevel = village.getVillageLevel();
         this.personalityModifierId = village.getPersonalityModifier().getId();
         this.biomeModifierId = village.getBiomeModifier().getId();
         this.luxuryResourceIds = new ArrayList<>(village.getLuxuryResourceIds());
         hydrateModifiers();
+
+        modConfig = ModConfig.getInstance();
+        float startingReserve = modConfig.getStartingReserveCurrency(villageLevel);
+        this.staticLedger.setCurrency(startingReserve);
+        this.theoLedger.setCurrency(startingReserve);
+
+        this.cycleProcess();
     }
 
 
@@ -159,6 +171,11 @@ public class Mayor {
 
     public List<String> getLuxuryResourceIds() { return luxuryResourceIds; }
 
+    public int getQuota(String resourceId) {
+        EconomyResource res = ModConfig.getInstance().getResource(resourceId);
+        return EconomyMath.quota(villageLevel, res);
+    }
+
     @Nullable
     public ServerLevel getLevel() {
         return level;
@@ -203,6 +220,13 @@ public class Mayor {
         return active;
     }
 
+    public float getTotalCurrency() {
+        return staticLedger.getCurrency();
+    }
+
+    public Set<EconomyResource> getTradedResources() {
+        return tradedResources;
+    }
 
     //** Modifiers **//
 
@@ -251,21 +275,21 @@ public class Mayor {
     //Calculates marginal demand for each resource
     private void recalculateDemand()
     {
-        float z = config().getDemandDampeningFactor();
         demand.clear();
         for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
             int supply = theoLedger.get(id);
-            float q = EconomyMath.quotaFraction(supply, resource.productionAt(villageLevel + 1));
+            float q = EconomyMath.quotaFraction(villageLevel, supply, resource);
             float b = favoribility(id);
-            float D = MarketState.marketRate(id);
 
             //this village's current demand for one more unit of resource j
-            float d = b*D*(1f - z*q);
+            float d = EconomyMath.margDemBuy(villageLevel, 1, interestRate(), q, b, resource);
+            float sell = EconomyMath.margDemSale(villageLevel, 1, interestRate(), q, b, resource);
+            float tradeDemand = d;
+            if(sell >= 0 && sell > d) tradeDemand = -sell;
 
-            //+ r/q : average quota bonus per unit  //TODO: EconomyMath.marginalDemand once MarketState is real
-            demand.put(id, d);
+            demand.put(id, tradeDemand);
         }
     }
 
@@ -282,36 +306,42 @@ public class Mayor {
             if (item == null) continue;
 
             float d = demand.getOrDefault(id, 0f);
+            if (Math.abs(d) < NEGLIGIBLE_DEMAND) continue;
+
             float D = MarketState.marketRate(id);
-            float a = rollAgreeableness(VillageManager.RANDOM);
+            float m = Math.abs(d);
+            float dReserve = rollReserveDemand(m, rollAgreeableness());
 
-            float buyProfit = d - D;    //profit per unit if we buy at market rate
-            float sellProfit = D - d;   //profit per unit if we sell at market rate
-            if (buyProfit <= 1 && sellProfit <= 1) continue;
-
-            //Quantity of trade derived at haggling time
             int quantity = 1;
 
-            if (buyProfit >= sellProfit)
+            if (d > 0)
             {
-                int reserveBuy = Math.round(a * d);
-                Post post = new Post(this, Math.round(d), quantity, reserveBuy, theoLedger);
+                float reserveBuy = Math.max(0f, D + m - dReserve);
+                Post post = new Post(this, d, quantity, reserveBuy, theoLedger);
                 Bazaar.buyOffer(level, item, post);
             }
             else
             {
                 if (theoLedger.get(id) < quantity) continue;
-                int reserveSell = Math.round(d * (2f - a));
-                Post post = new Post(this, Math.round(d), quantity, reserveSell, theoLedger);
+                float reserveSell = Math.max(0f, D - m + dReserve);
+                Post post = new Post(this, d, quantity, reserveSell, theoLedger);
                 Bazaar.sellOffer(level, item, post);
             }
         }
     }
 
-    private float rollAgreeableness(Random rng) {
+    private float rollAgreeableness() {
+        double gaussian = VillageManager.RANDOM.nextGaussian();
         double sigma = ModConfig.getBalmConfig().tradeConfigs.agreeablenessStdDev;
-        double rolled = rng.nextGaussian() * sigma + personalityModifier.getAgreeableness();
+        double rolled = gaussian*sigma + personalityModifier.getAgreeableness();
         return (float) Math.max(0d, Math.min(1d, rolled));
+    }
+
+    private float rollReserveDemand(float m, float a) {
+        double mean = m * (1.5d - a);
+        double sigma = m / 6d;
+        double rolled = VillageManager.RANDOM.nextGaussian() * sigma + mean;
+        return (float) Math.max(0d, rolled);
     }
 
     //Village receives pro-rated portion of cyclic resource amounts each day
@@ -323,7 +353,9 @@ public class Mayor {
             staticLedger.add(id, produced);
         }
 
-        staticLedger.addCurrency(staticLedger.getCurrency() * (interestRate() - 1f));
+        int cycleLength = Math.max(1, ModConfig.getDefaults().cycleLengthDays);
+        float dailyRate = (interestRate() - 1f) / cycleLength;
+        staticLedger.addCurrency(staticLedger.getCurrency() * dailyRate);
         cachedNbt = serializeNBT();
     }
 
@@ -354,14 +386,13 @@ public class Mayor {
         for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
-            float q = EconomyMath.quotaFraction(staticLedger.get(id), resource.productionAt(villageLevel + 1));
-            if (q < 1f) { allQuotasMet = false; continue; }
+            float q = EconomyMath.quotaFraction(villageLevel, staticLedger.get(id), resource);
+            if (q < 1f) { allQuotasMet = false; }
+        }
 
-            float reward = EconomyMath.growthReward(
-                MarketState.totalCurrency(),
-                config().getGrowthFactor(),
-                1, 1);
-            staticLedger.addCurrency((float) Math.floor(q) * reward);
+        if(allQuotasMet) {
+            float reward = EconomyMath.growthReward()*tradedResources.size();
+            staticLedger.addCurrency(reward);
         }
 
         //3. Process level ups
@@ -386,6 +417,13 @@ public class Mayor {
             theoLedger.add(id, produced);
         }
 
+    }
+
+    private void addTradedResources() {
+        for (EconomyResource resource : getActiveResources()) {
+            int produced = resource.productionAt(villageLevel);
+            if(produced >0) tradedResources.add(resource);
+        }
     }
 
     private CycleModifier drawCycleModifier()
@@ -462,4 +500,7 @@ public class Mayor {
         if (mayorEntity == null) return;
         mayorEntity.setPendingMayorData(cachedNbt);
     }
+
+
+
 }

@@ -34,7 +34,7 @@ public class Bazaar {
 
 
     //** CONSTRUCTORS
-    private Bazaar(ServerLevel level) {
+    public Bazaar(ServerLevel level) {
         this.level = level;
         this.markets = new HashMap<>();
         this.saleLog = new ArrayList<>();
@@ -66,7 +66,6 @@ public class Bazaar {
         return (market != null) ? market.rate() : 0f;
     }
 
-    /** Global log of all sales; resides in the bazaar for now **/
     public List<Sale> getSaleLog() {
         return Collections.unmodifiableList(saleLog);
     }
@@ -93,8 +92,10 @@ public class Bazaar {
 
     //Flushes all market postings for this tick
     public void flushMarkets() {
-        for (Market market : markets.values())
+        for (Market market : markets.values()) {
             market.flushMarket(this);
+        }
+
     }
 
     public void recordSale(Sale sale) {
@@ -104,11 +105,7 @@ public class Bazaar {
         if (market != null) market.recordSale(sale);
     }
 
-    /**
-     * Initial market rate: base demand Do = r/q.
-     * TODO: use the real per-unit quota reward r once global currency / MarketState is live;
-     * for now r is approximated by the configured growthFactor at an assumed half quota.
-     */
+
     private static float initialRate(EconomyResource resource) {
         float r = ModConfig.getDefaults().growthFactor;
         float q = 0.5f;
@@ -128,23 +125,4 @@ public class Bazaar {
         if (bazaar != null) bazaar.postSellOffer(item, posting);
     }
 
-
-    //** EVENTS **//
-
-    public static void init(EventRegistrar reg) {
-        reg.registerOnLevelLoad(Bazaar::onLevelLoad);
-        reg.registerOnServerStopped(Bazaar::onServerStopped);
-    }
-
-    /** Create the bazaar for the Overworld once it loads (markets need hydrated resources) **/
-    private static void onLevelLoad(LevelLoadingEvent.Load event) {
-        if (event.getLevel().isClientSide()) return;
-        if (event.getLevel() != GeneralConfig.OVERWORLD) return;
-        if (BAZAARS.containsKey(event.getLevel())) return;
-        new Bazaar((ServerLevel) event.getLevel());
-    }
-
-    private static void onServerStopped(ServerStoppedEvent event) {
-        BAZAARS.clear();
-    }
 }

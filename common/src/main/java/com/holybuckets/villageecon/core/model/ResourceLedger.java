@@ -91,7 +91,7 @@ public class ResourceLedger {
      */
     public void logTrade(Sale sale, boolean isBuyer) {
         if (sale == null) return;
-        int totalPrice = sale.getSalePrice() * sale.getSaleQuantity();
+        float totalPrice = sale.getSalePrice() * sale.getSaleQuantity();
         if (isBuyer) {
             add(sale.getResourceId(), sale.getSaleQuantity());
             addCurrency(-totalPrice);

@@ -4,12 +4,15 @@ package com.holybuckets.villageecon.command;
 
 import com.holybuckets.foundation.event.CommandRegistry;
 import com.holybuckets.villageecon.LoggerProject;
+import com.holybuckets.villageecon.core.VillageManager;
 import com.holybuckets.villageecon.core.debug.VillageEconTradeSimulator;
+import com.holybuckets.villageecon.core.model.VillageEconomyChunk;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.core.BlockPos;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -33,6 +36,7 @@ public class CommandList {
         CommandRegistry.register(RunProcess::tick);
         CommandRegistry.register(RunProcess::day);
         CommandRegistry.register(RunProcess::cycle);
+        CommandRegistry.register(CreateMayor::atPlayer);
     }
 
     private static void reply(CommandSourceStack source, String message) {
@@ -274,6 +278,37 @@ public class CommandList {
             }
 
             reply(source, "Ran " + process + " process");
+            return 1;
+        }
+    }
+    //END COMMAND
+
+    //8. Create Mayor
+    private static class CreateMayor
+    {
+        private static LiteralArgumentBuilder<CommandSourceStack> atPlayer() {
+            return Commands.literal(PREFIX)
+                .then(Commands.literal("createMayor")
+                    .executes(context -> execute(context.getSource()))
+                );
+        }
+
+        private static int execute(CommandSourceStack source)
+        {
+            LoggerProject.logDebug(CLASS_ID + "008", "Create Mayor Command");
+            ServerLevel level = source.getLevel();
+            BlockPos origin = BlockPos.containing(source.getPosition());
+
+            VillageEconomyChunk village = VillageManager.designateVillage(level, origin);
+
+            if (village == null) {
+                source.sendFailure(Component.literal(
+                    "Could not designate a village here. This chunk may already be a village."));
+                return 0;
+            }
+
+            reply(source, "Designated village " + village.getId()
+                + " and spawned its mayor at " + origin.toShortString());
             return 1;
         }
     }

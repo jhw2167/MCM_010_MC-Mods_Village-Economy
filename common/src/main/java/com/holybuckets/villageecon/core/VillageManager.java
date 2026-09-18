@@ -19,6 +19,7 @@ import com.holybuckets.foundation.structure.StructureInfo;
 import com.holybuckets.villageecon.Constants;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
+import com.holybuckets.villageecon.config.model.EconomyResource;
 import com.holybuckets.villageecon.core.model.Mayor;
 import com.holybuckets.villageecon.core.model.VillageEconomyChunk;
 import com.holybuckets.villageecon.core.trade.Bazaar;
@@ -47,20 +48,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Class: VillageManager
- * Description: Manages all VillageEconomy instances for a single level and maintains
- * the overall cycle sequence. One instance per level; currently only the Overworld
- * is initialized.
+ * Manager class for all virtual villages, tethered to overworld for now
+ * VillageManager has access to all VillageChunks and Mayors
  *
- * Three tick-based cyclic processes are tracked here and propagated down:
- *  - tickProcess():  every 120 ticks, demand recalculation + speculative trades (Mayor level)
- *  - dailyProcess(): each day, production and interest granted to the static ledger
- *  - cycleProcess(): each cycleLengthDays (16), ledgers reconciled, trades scheduled and
- *    executed, quota rewards granted, level ups and next-cycle modifiers processed
+ * Mayors are virtual instance which process daily trades,
+ * chunks are only used for initializing and saving static data too like village level.
  *
- * Also owns the list of village chunk positions whose mayor has died and must be
- * respawned the next time that chunk is naturally loaded. That list is persisted
- * to the DataStore.
+ * Mayors save their data to MayorEntities.
  */
 public class VillageManager {
 
@@ -111,7 +105,7 @@ public class VillageManager {
         this.dayOfCycle = 0;
         this.cycleIndex = 0;
         MANAGERS.put(level, this);
-        LoggerProject.logInit(CLASS_ID + "000", VillageManager.class.getName());
+        LoggerProject.logInit("012000", VillageManager.class.getName());
     }
 
 
@@ -181,14 +175,33 @@ public class VillageManager {
     }
 
     public Map<ChunkPos, Mayor> getMayors() {
-        return Collections.unmodifiableMap(mayors);
+        return mayors;
     }
 
+    public List<Mayor> getMayorList() {
+        return new ArrayList<>(mayors.values());
+    }
 
     @Nullable
     public Mayor getMayor(String villageChunkId) {
         ChunkPos pos = ChunkUtil.getChunkPos(villageChunkId);
         return getMayor(pos);
+    }
+
+    public Set<EconomyResource> getAllTradedResources() {
+        Set<EconomyResource> allResources = new HashSet<>();
+        for(Mayor mayor : mayors.values()) {
+            allResources.addAll(mayor.getTradedResources());
+        }
+        return allResources;
+    }
+
+    public int countTradedResources() {
+        int sum = 0;
+        for(Mayor mayor : mayors.values()) {
+            sum += mayor.getTradedResources().size();
+        }
+        return sum;
     }
 
     @Nullable
@@ -205,22 +218,20 @@ public class VillageManager {
 
     //** MAYOR LIFECYCLE **//
 
-    public Mayor resolveMayorEntity(@NotNull String villageChunkId, @Nullable CompoundTag tag, MayorEntity entity)
+    public void resolveMayorEntity(@NotNull String villageChunkId, @Nullable CompoundTag tag, MayorEntity entity)
     {
         ChunkPos pos = ChunkUtil.getChunkPos(villageChunkId);
         Mayor existing = mayors.get(pos);
         persistedMayorChunkpos.remove(pos);
         if (existing != null) {
             existing.attachEntity(entity);
-            return existing;
+            return;
         }
 
-        Mayor mayor = new Mayor(level);
-        if (tag != null) mayor.deserializeNBT(tag);
+        Mayor mayor = new Mayor(level, tag);
         mayor.setVillageChunkId(villageChunkId);
         mayor.attachEntity(entity);
         mayors.put(pos, mayor);
-        return mayor;
     }
 
     public void registerMayor(Mayor mayor) {
@@ -257,7 +268,7 @@ public class VillageManager {
 
         village.createMayor();
         villagesWithDeadOrLostMayors.remove(pos);
-        LoggerProject.logInfo(CLASS_ID + "004", "Respawned mayor for village " + village.getId());
+        LoggerProject.logInfo("012004", "Respawned mayor for village " + village.getId());
     }
 
 
@@ -280,7 +291,7 @@ public class VillageManager {
             VillageEconomyChunk village = new VillageEconomyChunk(level, info);
             villages.put(pos, village);
             village.createMayor();
-            LoggerProject.logInfo(CLASS_ID + "001", "New village economy registered at " + pos
+            LoggerProject.logInfo("012001", "New village economy registered at " + pos
                 + " for structure " + info.getStructureLocation());
         }
         //else: existing villages are restored from chunk NBT via VillageEconomy::resolveSubData
@@ -318,7 +329,7 @@ public class VillageManager {
             if (market == null) continue;
 
             LedgerSalesSync message = new LedgerSalesSync(
-                offer.getResourceId(), market.rate(), market.getRecentSalePrices());
+                offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded());
             HBUtil.NetworkUtil.serverSendToPlayer(player, message);
         }
     }
@@ -341,7 +352,7 @@ public class VillageManager {
     /** each cycle: reconcile ledgers, schedule and execute trades, rewards, level ups, new modifiers **/
     private void cycleProcess()
     {
-        LoggerProject.logInfo(CLASS_ID + "002", "Processing economy cycle " + cycleIndex
+        LoggerProject.logInfo("012002", "Processing economy cycle " + cycleIndex
             + " for " + mayors.size() + " village(s)");
 
         for (Mayor mayor : mayors.values()) {
@@ -392,7 +403,7 @@ public class VillageManager {
         persistedMayorChunkpos.clear();
         loadChunkPosSet(worldData, KEY_VILLAGE_CHUNKS, persistedMayorChunkpos);
 
-        LoggerProject.logDebug(CLASS_ID + "003", "Loaded cycle state: day " + dayOfCycle
+        LoggerProject.logDebug("012003", "Loaded cycle state: day " + dayOfCycle
             + " of cycle " + cycleIndex + "; " + villagesWithDeadOrLostMayors.size() + " mayor(s) queued for respawn");
     }
 
@@ -420,7 +431,7 @@ public class VillageManager {
                 try {
                     target.add(ChunkUtil.getChunkPos(entry.getAsString()));
                 } catch (Exception e) {
-                    LoggerProject.logWarning(CLASS_ID + "005", "Could not parse chunk id in " + property
+                    LoggerProject.logWarning("012005", "Could not parse chunk id in " + property
                         + ": " + entry + ". " + e.getMessage());
                 }
             }
@@ -442,10 +453,7 @@ public class VillageManager {
         VillageManager manager = get(level);
         if (manager == null || mayorEntity == null) return;
 
-        if(villageChunkId == null) {
-            manager.designateVillage(mayorEntity);
-            return;
-        }
+        if(villageChunkId == null) return;
 
         if(manager.mayorEntities.containsKey(mayorEntity)) {
             manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
@@ -459,28 +467,30 @@ public class VillageManager {
     }
 
     /**
-     * A Mayor was placed into the world without a village, from a spawn egg or a command.
-     * The chunk it stands in becomes a designated village chunk and the entity is bound
-     * to a Mayor so it starts trading on the next trade tick.
+     * Designates the chunk containing origin as a village chunk and spawns its Mayor.
+     * Returns the village, or null if one already exists there or creation failed.
      */
-    private void designateVillage(MayorEntity mayorEntity)
+    @Nullable
+    public static VillageEconomyChunk designateVillage(ServerLevel level, BlockPos origin)
     {
-        BlockPos origin = mayorEntity.blockPosition();
-        ChunkPos pos = new ChunkPos(origin);
+        VillageManager manager = get(level);
+        if (manager == null || origin == null) return null;
 
-        VillageEconomyChunk village = villages.get(pos);
-        if (village == null) {
-            village = new VillageEconomyChunk(level, origin);
-            villages.put(pos, village);
-            LoggerProject.logInfo(CLASS_ID + "008", "Designated village chunk " + village.getId()
-                + " from a placed Mayor");
+        ChunkPos pos = new ChunkPos(origin);
+        if (manager.villages.containsKey(pos)) return null;
+
+        VillageEconomyChunk village = new VillageEconomyChunk(level, origin);
+        manager.villages.put(pos, village);
+
+        Mayor mayor = village.createMayor();
+        if (mayor == null) {
+            manager.villages.remove(pos);
+            return null;
         }
 
-        Mayor mayor = village.adoptMayor(mayorEntity);
-        if (mayor == null) return;
-
-        mayorEntities.put(mayorEntity, origin);
-        villagesWithDeadOrLostMayors.remove(pos);
+        manager.villagesWithDeadOrLostMayors.remove(pos);
+        LoggerProject.logInfo("012008", "Designated village chunk " + village.getId() + " by command");
+        return village;
     }
 
 
@@ -524,6 +534,8 @@ public class VillageManager {
 
         VillageManager manager = new VillageManager((ServerLevel) event.getLevel());
         manager.load(GeneralConfig.getInstance().getDataStore());
+        Bazaar bazaar = new Bazaar((ServerLevel) event.getLevel());
+        MarketState.init(manager, bazaar);
     }
 
     private static void onChunkLoad(ChunkLoadingEvent.Load event) {

@@ -17,13 +17,11 @@ import java.util.Random;
 import static com.holybuckets.foundation.HBUtil.ChunkUtil.chunkDist;
 
 /**
- * Class: Market
- * Description: The open market for a single resource (Item). Villages post buy and
- * sell offers each tickTrade; flushMarket() matches buyers against sellers within
- * the buyer's chunk radius and haggles a price.
+ * Abstraction where villages sell and buy items
+ * a market encapsulates a single tradable resource
+ * when a market is flushed, all postings are removed whether they find a partner or not.
  *
- * Each buyer and seller may trade only once per tickTrade; posts are removed after
- * their haggle attempt, successful or not.
+ * buy and sell postings are posted via the bazaar, flushing occurs every 5-6 seconds.
  */
 public class Market {
 
@@ -38,7 +36,7 @@ public class Market {
 
     private final Queue<Post> buyPosts = new ArrayDeque<>();
     private final List<Post> sellPosts = new ArrayList<>();
-    private final ArrayDeque<Integer> recentSalePrices = new ArrayDeque<>();
+    private final ArrayDeque<Float> recentSalePrices = new ArrayDeque<>();
 
     public Market(Item item) {
         this.item = item;
@@ -66,7 +64,14 @@ public class Market {
 
     public float rate() { return marketRate.rate(); }
 
-    public List<Integer> getRecentSalePrices() { return new ArrayList<>(recentSalePrices); }
+    public List<Float> getRecentSalePrices() { return new ArrayList<>(recentSalePrices); }
+
+    public List<Integer> getRecentSalePricesRounded() {
+        List<Integer> rounded = new ArrayList<>(recentSalePrices.size());
+        for (Float price : recentSalePrices)
+            rounded.add(Math.round(price));
+        return rounded;
+    }
 
     public void recordSale(Sale sale) {
         if (sale == null) return;
@@ -102,8 +107,14 @@ public class Market {
     public void flushMarket(Bazaar bazaar)
     {
         //sort
+        if(sellPosts.isEmpty() || buyPosts.isEmpty()) {
+            sellPosts.clear();
+            buyPosts.clear();
+            return;
+        }
         List<Post> sortedBuyPosts = new ArrayList<>(buyPosts);
-        sortedBuyPosts.sort((a, b) -> Integer.compare(b.getDemandReserve(), a.getDemandReserve()));
+        sortedBuyPosts.sort((a, b) -> Float.compare(b.getDemandReserve(), a.getDemandReserve()));
+        int sales = 0;
 
         for(Post buy : sortedBuyPosts)
         {
@@ -116,12 +127,22 @@ public class Market {
                 buy.getLedger().logTrade(sale, true);
                 sell.getLedger().logTrade(sale, false);
                 bazaar.recordSale(sale);
+                sales++;
             }
 
         }
 
+        logMarketSales(buyPosts.size(), sellPosts.size(), sales, this);
+
         buyPosts.clear();
         sellPosts.clear();
+    }
+
+    private static void logMarketSales(int buyPostsSize, int sellPostsSize, int sales, Market market)
+    {
+        LoggerProject.logInfo("013003", "Market: " + market.resourceId
+            + ": " + sales + " sales out of " + buyPostsSize
+            + " buy posts and " + sellPostsSize + " sell posts.");
     }
 
     //Find the closest seller by distance to the buyer's village
@@ -160,15 +181,16 @@ public class Market {
     }
 
     /**
-     * Determines sale price based on the buyers and sellers **RESERVER PRICE**
-     * Reserver price is a Random number with lambda = marketRate, multipied by agreeableness
+     * Determines sale price from the buyer's and the seller's **RESERVE PRICE**.
+     * Each reserve price is the market rate adjusted by that village's rolled profit
+     * expectation: the most a buyer will pay, the least a seller will accept.
      *
      * Sale is returned if present
      */
     private Sale haggle(Post buy, Post sell)
     {
-        int reserveBuy = buy.getDemandReserve();
-        int reserveSell = sell.getDemandReserve();
+        float reserveBuy = buy.getDemandReserve();
+        float reserveSell = sell.getDemandReserve();
 
         //No zone of agreement - the natural fallthrough
         if (reserveBuy < reserveSell) return null;
@@ -181,7 +203,7 @@ public class Market {
         float dk = Math.abs(sell.getDemand());
         float weight = (di + dk <= 0) ? 0.5f : di / (di + dk);
 
-        int price = Math.round(reserveSell + weight * (reserveBuy - reserveSell));
+        float price = reserveSell + weight * (reserveBuy - reserveSell);
         int quantity = Math.min(buy.getQuantityDemand(), sell.getQuantityDemand());
         if (quantity <= 0) return null;
 
