@@ -7,18 +7,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Class: ResourceLedger
- * Description: Per-village bookkeeping of resource counts and reserve currency.
- * The Mayor holds two instances:
- *  - staticLedger: true current value of resources owned by the village. Only mutated
- *    by dailyProcess (production, interest) and executed trades. Rectified each cycle.
- *  - theoLedger: theoretical values of all village resources after speculative trades,
- *    updated every trade sequence (tickProcess).
- *
- * Resource counts are keyed by resource id (the raw item name from the economy JSON config)
- * and denominated in individual items.
- */
 public class ResourceLedger {
 
     public static final String CLASS_ID = "014";
@@ -54,11 +42,8 @@ public class ResourceLedger {
         set(resourceId, get(resourceId) + count);
     }
 
-    /** Removes count of the resource; returns false (and removes nothing) if there is not enough **/
     public boolean remove(String resourceId, int count) {
-        int current = get(resourceId);
-        if (count > current) return false;
-        set(resourceId, current - count);
+        set(resourceId, get(resourceId) - count);
         return true;
     }
 
@@ -84,11 +69,6 @@ public class ResourceLedger {
 
     //** Trading **//
 
-    /**
-     * Applies a completed sale to this ledger.
-     * Buyer: gains resources, pays price * quantity in currency.
-     * Seller: loses resources, receives price * quantity in currency.
-     */
     public void logTrade(Sale sale, boolean isBuyer) {
         if (sale == null) return;
         float totalPrice = sale.getSalePrice() * sale.getSaleQuantity();
@@ -104,12 +84,6 @@ public class ResourceLedger {
 
     //** Reconciliation **//
 
-    /**
-     * Computes (this - other) per resource id across both ledgers.
-     * When called as theoLedger.diff(staticLedger):
-     *  - positive entries are surpluses: resources to be traded from other villages to this one
-     *  - negative entries are deficits: resources this village must schedule as outgoing trades
-     */
     public Map<String, Integer> diff(ResourceLedger other) {
         Map<String, Integer> result = new LinkedHashMap<>();
         for (String id : resources.keySet())

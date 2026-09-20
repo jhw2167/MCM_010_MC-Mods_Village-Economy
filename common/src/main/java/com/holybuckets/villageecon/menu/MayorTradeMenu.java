@@ -6,7 +6,14 @@ import com.holybuckets.villageecon.core.MarketState;
 import com.holybuckets.villageecon.core.model.Mayor;
 import com.holybuckets.villageecon.core.model.ResourceLedger;
 import com.holybuckets.villageecon.entity.MayorEntity;
+import com.holybuckets.villageecon.core.trade.Bazaar;
+import com.holybuckets.villageecon.core.trade.Market;
+import com.holybuckets.villageecon.networking.LedgerSalesSync;
+import com.holybuckets.villageecon.networking.MayorOffersSync;
+import com.holybuckets.foundation.HBUtil;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
@@ -61,6 +68,10 @@ public class MayorTradeMenu extends AbstractContainerMenu {
 
     public static final int BUTTON_TOGGLE_VIEW = 100;
 
+    /** FriendlyByteBuf.writeItem serialises the stack count as a single byte, so a slot
+     *  stack that must survive a round trip to the client cannot exceed this. **/
+    public static final int MAX_SYNC_COUNT = 127;
+
     private static final int INPUT_SLOTS = 1;
     private static final int OUTPUT_SLOT = 1;
 
@@ -71,16 +82,24 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     @Nullable
     private final Mayor mayor;
 
+    private float reserveCurrency = 0f;
+    private String villageName = "";
+    private float currencyDelta = 0f;
     private int selectedOffer = 0;
     private boolean graphView = true;
     private boolean updatingOutput = false;
 
-    public MayorTradeMenu(int syncId, Inventory playerInventory, @Nullable Mayor mayor, List<MayorTradeOffer> offers)
+    public MayorTradeMenu(int syncId, Inventory playerInventory, @Nullable Mayor mayor,
+        List<MayorTradeOffer> offers, float reserveCurrency, String villageName, float currencyDelta)
     {
         super(ModMenus.mayorTradeMenu.get(), syncId);
         this.player = playerInventory.player;
         this.mayor = mayor;
         if (offers != null) this.offers.addAll(offers);
+        this.reserveCurrency = reserveCurrency;
+        this.villageName = (villageName == null) ? "" : villageName;
+        this.currencyDelta = currencyDelta;
+        if (mayor != null) mayor.beginInteraction();
 
         this.tradeContainer = new SimpleContainer(2) {
             @Override
@@ -117,7 +136,10 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         List<MayorTradeOffer> offers = new ArrayList<>(count);
         for (int i = 0; i < count; i++)
             offers.add(MayorTradeOffer.read(buf));
-        return new MayorTradeMenu(syncId, playerInventory, null, offers);
+        float reserveCurrency = buf.readFloat();
+        String villageName = buf.readUtf();
+        float currencyDelta = buf.readFloat();
+        return new MayorTradeMenu(syncId, playerInventory, null, offers, reserveCurrency, villageName, currencyDelta);
     }
 
     public static void writeOffers(FriendlyByteBuf buf, List<MayorTradeOffer> offers) {
@@ -131,19 +153,37 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         List<MayorTradeOffer> offers = new ArrayList<>();
         if (mayor == null) return offers;
 
-        ResourceLedger ledger = mayor.getStaticLedger();
-
+        int level = mayor.getVillageLevel();
         for (EconomyResource resource : mayor.getActiveResources())
         {
             String id = resource.getResourceId();
+            int delta = mayor.getTheoLedger().get(id) - mayor.getStaticLedger().get(id);
+            boolean produces = resource.productionAt(level) > 0;
             offers.add(new MayorTradeOffer(id, resource.getItem(),
-                ledger.get(id), mayor.getQuota(id), MarketState.marketRate(id)));
+                mayor.getAvailable(id), mayor.getQuota(id), MarketState.marketRate(id), delta, produces));
         }
         return offers;
     }
 
 
+    public Container getTradeContainer() { return tradeContainer; }
+
     public List<MayorTradeOffer> getOffers() { return offers; }
+
+    /** The village's reserve currency, as last synced from the server **/
+    public float getReserveCurrency() { return reserveCurrency; }
+
+    /** Display name of the village being traded with **/
+    public String getVillageName() { return villageName; }
+
+    /** Net currency gained or lost through village to village trades this cycle **/
+    public float getCurrencyDelta() { return currencyDelta; }
+
+    /** theoLedger currency less staticLedger currency **/
+    public static float currencyDelta(Mayor mayor) {
+        if (mayor == null) return 0f;
+        return mayor.getTheoLedger().getCurrency() - mayor.getStaticLedger().getCurrency();
+    }
 
     public int getSelectedOffer() { return selectedOffer; }
 
@@ -160,6 +200,55 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         this.graphView = graphView;
     }
 
+    /** Applied on the client when the server pushes refreshed stock after a trade **/
+    public void setOffers(List<MayorTradeOffer> updated, float reserveCurrency, String villageName, float currencyDelta) {
+        this.reserveCurrency = reserveCurrency;
+        this.villageName = (villageName == null) ? "" : villageName;
+        this.currencyDelta = currencyDelta;
+        if (updated == null) return;
+        this.offers.clear();
+        this.offers.addAll(updated);
+        if (this.selectedOffer >= this.offers.size())
+            this.selectedOffer = Math.max(0, this.offers.size() - 1);
+    }
+
+    /** Rebuilds offers from the mayor's current stock and pushes them to the client **/
+    private void syncOffers() {
+        if (mayor == null || !(player instanceof ServerPlayer serverPlayer)) return;
+        List<MayorTradeOffer> updated = buildOffers(mayor);
+        float reserve = mayor.getStaticLedger().getCurrency();
+        String name = mayor.getName();
+        float delta = currencyDelta(mayor);
+        setOffers(updated, reserve, name, delta);
+        HBUtil.NetworkUtil.serverSendToPlayer(serverPlayer, new MayorOffersSync(updated, reserve, name, delta));
+    }
+
+    /**
+     * Pushes the global sale history for the newly selected resource straight away, so the
+     * graph has data the moment a player switches items rather than on the next sync tick.
+     */
+    private void syncSelectedSales() {
+        if (mayor == null || !(player instanceof ServerPlayer serverPlayer)) return;
+
+        MayorTradeOffer offer = getSelected();
+        if (offer == null || offer.getItem() == null) return;
+
+        Bazaar bazaar = Bazaar.get(mayor.getLevel());
+        if (bazaar == null) return;
+
+        Market market = bazaar.getMarket(offer.getItem());
+        if (market == null) return;
+
+        HBUtil.NetworkUtil.serverSendToPlayer(serverPlayer, new LedgerSalesSync(
+            offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded()));
+    }
+
+    @Override
+    public void slotsChanged(Container container) {
+        super.slotsChanged(container);
+        if (container == tradeContainer) updateOutput();
+    }
+
     @Override
     public boolean clickMenuButton(Player player, int id)
     {
@@ -170,6 +259,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         if (id >= 0 && id < offers.size()) {
             this.selectedOffer = id;
             updateOutput();
+            syncSelectedSales();
             return true;
         }
         return false;
@@ -186,11 +276,41 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         }
     }
 
+    /**
+     * Writes the output slot and pushes it to the client directly. Slot changes made while
+     * the server is handling a container click are suppressed by the vanilla packet handler,
+     * so the result has to be sent explicitly, as the vanilla crafting menus do.
+     */
+    private void setOutput(ItemStack stack)
+    {
+        tradeContainer.setItem(OUTPUT_SLOT, stack);
+        if (player instanceof ServerPlayer serverPlayer) {
+            serverPlayer.connection.send(new ClientboundContainerSetSlotPacket(
+                this.containerId, this.incrementStateId(), OUTPUT_SLOT, stack));
+        }
+    }
+
+    /**
+     * True if the stack is a valid item of exchange for this offer. Defers to the
+     * EconomyResource so a useTags entry accepts any item in the tag, not just the
+     * resource's own item. Falls back to item equality if the resource is unavailable.
+     */
+    private boolean matchesOffer(MayorTradeOffer offer, ItemStack stack)
+    {
+        if (offer == null || stack.isEmpty()) return false;
+
+        ModConfig config = ModConfig.getInstance();
+        EconomyResource resource = (config != null) ? config.getResource(offer.getResourceId()) : null;
+        if (resource != null) return resource.matches(stack);
+
+        return offer.getItem() != null && stack.is(offer.getItem());
+    }
+
     private void computeOutput()
     {
         MayorTradeOffer offer = getSelected();
         if (offer == null) {
-            tradeContainer.setItem(OUTPUT_SLOT, ItemStack.EMPTY);
+            setOutput(ItemStack.EMPTY);
             return;
         }
 
@@ -203,13 +323,13 @@ public class MayorTradeMenu extends AbstractContainerMenu {
             ItemStack stack = tradeContainer.getItem(i);
             if (stack.isEmpty()) continue;
             if (stack.is(currency)) currencyIn += stack.getCount();
-            else if (offer.getItem() != null && stack.is(offer.getItem()))
+            else if (matchesOffer(offer, stack))
                 resourceIn += stack.getCount()/64;
         }
 
         if (resourceIn > 0 && offer.getItem() != null) {
             int payout = (int) Math.floor(resourceIn * rate);
-            tradeContainer.setItem(OUTPUT_SLOT, payout > 0 ? new ItemStack(currency, payout) : ItemStack.EMPTY);
+            setOutput(payout > 0 ? new ItemStack(currency, payout) : ItemStack.EMPTY);
             return;
         }
 
@@ -217,11 +337,11 @@ public class MayorTradeMenu extends AbstractContainerMenu {
             int available = offer.getLedgerAmount();
             int affordable = (int) Math.floor(currencyIn / rate);
             int amount = Math.min(available, affordable);
-            tradeContainer.setItem(OUTPUT_SLOT, amount > 0 ? new ItemStack(offer.getItem(), amount*64) : ItemStack.EMPTY);
+            setOutput(amount > 0 ? new ItemStack(offer.getItem(), amount*64) : ItemStack.EMPTY);
             return;
         }
 
-        tradeContainer.setItem(OUTPUT_SLOT, ItemStack.EMPTY);
+        setOutput(ItemStack.EMPTY);
     }
 
     private void onOutputTaken(ItemStack taken)
@@ -234,21 +354,43 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         //calculate leftover in input slot after dividing by 64, and put it back in the input slot
 
         Item currency = ModConfig.getInstance().getCurrencyItem();
-        ResourceLedger ledger = mayor.getStaticLedger();
+        ResourceLedger ledger = mayor.getTheoLedger();
+        ResourceLedger staticLedger = mayor.getStaticLedger();
+        float rate = Math.max(0.01f, offer.getMarketRate());
 
         int leftover = 0;
         if (taken.is(currency)) {
-            int resourceIn = countInput(offer.getItem())/64;
-            leftover =  tradeContainer.getItem(0).getCount() % 64;
-            ledger.add(offer.getResourceId(), resourceIn);
+            //Player sold stacks of the resource and took currency
+            int resourceIn = countOfferInput(offer);
+            int stacks = resourceIn / 64;
+            leftover = resourceIn % 64;
+            ledger.add(offer.getResourceId(), stacks);
             ledger.addCurrency(-taken.getCount());
-        } else if (offer.getItem() != null && taken.is(offer.getItem())) {
+            staticLedger.add(offer.getResourceId(), stacks);
+            staticLedger.addCurrency(-taken.getCount());
+        } else if (matchesOffer(offer, taken)) {
+            //Player spent currency and took stacks of the resource
             int currencyIn = countInput(currency);
-            ledger.remove(offer.getResourceId(), taken.getCount());
-            ledger.addCurrency(currencyIn);
+            int stacks = taken.getCount() / 64;
+            int cost = (int) Math.ceil(stacks * rate);
+            leftover = Math.max(0, currencyIn - cost);
+            ledger.remove(offer.getResourceId(), stacks);
+            ledger.addCurrency(cost);
+            staticLedger.remove(offer.getResourceId(), stacks);
+            staticLedger.addCurrency(cost);
         }
 
         consumeInputs(leftover);
+        syncOffers();
+    }
+
+    private int countOfferInput(MayorTradeOffer offer) {
+        int total = 0;
+        for (int i = 0; i < INPUT_SLOTS; i++) {
+            ItemStack stack = tradeContainer.getItem(i);
+            if (matchesOffer(offer, stack)) total += stack.getCount();
+        }
+        return total;
     }
 
     private int countInput(@Nullable Item item) {
@@ -275,6 +417,54 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         }
     }
 
+    /**
+     * Vanilla moveItemStackTo places at most one slot's worth into an empty slot and then
+     * stops. The trade slots hold far more than a vanilla stack, so an oversized stack has
+     * to be moved out across several passes until it is empty or the inventory is full.
+     */
+    private boolean moveEntireStackTo(ItemStack stack, int startIndex, int endIndex, boolean reverseDirection)
+    {
+        boolean moved = false;
+        while (!stack.isEmpty()) {
+            if (!this.moveItemStackTo(stack, startIndex, endIndex, reverseDirection)) break;
+            moved = true;
+        }
+        return moved;
+    }
+
+    /** Effective input capacity: the configured slot size, bounded by what can be synced **/
+    private int inputCapacity() {
+        return Math.min(ModConfig.getInstance().getMayorTradeSlotCapacity(), MAX_SYNC_COUNT);
+    }
+
+    /**
+     * Merges a stack into the input slot past the item's own max stack size, so repeated
+     * shift clicks accumulate. Vanilla moveItemStackTo caps merges at stack.getMaxStackSize().
+     */
+    private boolean mergeIntoInput(ItemStack stack)
+    {
+        if (stack.isEmpty()) return false;
+        ItemStack current = tradeContainer.getItem(0);
+        int cap = inputCapacity();
+
+        if (current.isEmpty()) {
+            int move = Math.min(stack.getCount(), cap);
+            if (move <= 0) return false;
+            tradeContainer.setItem(0, stack.split(move));
+            return true;
+        }
+
+        if (!ItemStack.isSameItemSameTags(current, stack)) return false;
+        int room = cap - current.getCount();
+        if (room <= 0) return false;
+
+        int move = Math.min(room, stack.getCount());
+        current.grow(move);
+        stack.shrink(move);
+        tradeContainer.setChanged();
+        return true;
+    }
+
     @Override
     public ItemStack quickMoveStack(Player player, int index)
     {
@@ -285,25 +475,30 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         ItemStack stack = slot.getItem();
         result = stack.copy();
 
-        int invStart = 3;
-        int invEnd = this.slots.size();
+        final int invStart = INPUT_SLOTS + 1;
+        final int invEnd = this.slots.size();
 
-        if (index < invStart) {
-            if (!this.moveItemStackTo(stack, invStart, invEnd, true)) return ItemStack.EMPTY;
+        if (index == OUTPUT_SLOT) {
+            if (!moveEntireStackTo(stack, invStart, invEnd, true)) return ItemStack.EMPTY;
             slot.onQuickCraft(stack, result);
+            onOutputTaken(result);
+        } else if (index < invStart) {
+            if (!moveEntireStackTo(stack, invStart, invEnd, true)) return ItemStack.EMPTY;
         } else {
-            if (!this.moveItemStackTo(stack, 0, INPUT_SLOTS, false)) return ItemStack.EMPTY;
+            if (!mergeIntoInput(stack)) return ItemStack.EMPTY;
         }
 
         if (stack.isEmpty()) slot.set(ItemStack.EMPTY);
         else slot.setChanged();
 
+        updateOutput();
         return result;
     }
 
     @Override
     public void removed(Player player) {
         super.removed(player);
+        if (mayor != null && !player.level().isClientSide()) mayor.endInteraction();
         if (player.level().isClientSide()) return;
         updatingOutput = true;
         try {
@@ -333,6 +528,11 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         }
 
         @Override
+        public boolean isActive() {
+            return !MayorTradeMenu.this.graphView;
+        }
+
+        @Override
         public int getMaxStackSize() {
             return ModConfig.getInstance().getMayorTradeSlotCapacity();
         }
@@ -346,6 +546,11 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     private class OutputSlot extends Slot {
         OutputSlot(Container container, int index, int x, int y) {
             super(container, index, x, y);
+        }
+
+        @Override
+        public boolean isActive() {
+            return !MayorTradeMenu.this.graphView;
         }
 
         @Override

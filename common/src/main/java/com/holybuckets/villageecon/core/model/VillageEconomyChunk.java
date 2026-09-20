@@ -121,6 +121,8 @@ public class VillageEconomyChunk implements IMangedChunkData {
 
     public String getId() { return id; }
 
+    public String getName() { return getId(); }
+
     public ChunkPos getChunkPos() { return pos; }
 
     public ServerLevel getLevel() { return level; }
@@ -155,10 +157,10 @@ public class VillageEconomyChunk implements IMangedChunkData {
     {
         List<EconomyResource> active = new ArrayList<>(MOD_CONFIG.getResources(ResourceType.STAPLE));
 
-        if (villageLevel >= MOD_CONFIG.getEconomyConfig().getBasicResourceStartLevel())
+        if (villageLevel >= ModConfig.getDefaults().basicResourceStartLevel)
             active.addAll(MOD_CONFIG.getResources(ResourceType.BASIC));
 
-        if (villageLevel >= MOD_CONFIG.getEconomyConfig().getLuxuryResourceStartLevel()) {
+        if (villageLevel >= ModConfig.getDefaults().luxuryResourceStartLevel) {
             for (String luxuryId : luxuryResourceIds) {
                 EconomyResource luxury = MOD_CONFIG.getResource(luxuryId);
                 if (luxury != null) active.add(luxury);
@@ -209,7 +211,7 @@ public class VillageEconomyChunk implements IMangedChunkData {
     private void determineLuxuryResources()
     {
         List<EconomyResource> pool = new ArrayList<>(MOD_CONFIG.getLuxuriesForBiome(getBiome()));
-        int count = Math.min(MOD_CONFIG.getEconomyConfig().getAssignedLuxuryResourceCount(), pool.size());
+        int count = Math.min(ModConfig.getDefaults().assignedLuxuryResourceCount, pool.size());
 
         for (int i = 0; i < count; i++)
         {

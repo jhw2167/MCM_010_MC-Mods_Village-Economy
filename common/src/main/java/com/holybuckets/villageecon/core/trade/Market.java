@@ -107,6 +107,7 @@ public class Market {
     public void flushMarket(Bazaar bazaar)
     {
         //sort
+        String item = this.resourceId;
         if(sellPosts.isEmpty() || buyPosts.isEmpty()) {
             sellPosts.clear();
             buyPosts.clear();
@@ -140,9 +141,10 @@ public class Market {
 
     private static void logMarketSales(int buyPostsSize, int sellPostsSize, int sales, Market market)
     {
+        int sum = market.recentSalePrices.stream().mapToInt(Float::intValue).sum();
+        int avg = (market.recentSalePrices.size() > 0) ? sum / market.recentSalePrices.size() : 0;
         LoggerProject.logInfo("013003", "Market: " + market.resourceId
-            + ": " + sales + " sales out of " + buyPostsSize
-            + " buy posts and " + sellPostsSize + " sell posts.");
+            + ": " + sales + " sales out of " + buyPostsSize + " buy posts and " + sellPostsSize + " sell posts. At average price: " + avg );
     }
 
     //Find the closest seller by distance to the buyer's village

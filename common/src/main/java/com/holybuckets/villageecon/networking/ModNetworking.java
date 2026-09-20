@@ -13,6 +13,13 @@ public class ModNetworking {
             Codecs::encodeLedgerSalesSync,
             Codecs::decodeLedgerSalesSync,
             Handlers::handleLedgerSalesSync);
+
+        networking.registerClientboundPacket(
+            id(MayorOffersSync.LOCATION),
+            MayorOffersSync.class,
+            Codecs::encodeMayorOffersSync,
+            Codecs::decodeMayorOffersSync,
+            Handlers::handleMayorOffersSync);
     }
 
     private static ResourceLocation id(String name) {

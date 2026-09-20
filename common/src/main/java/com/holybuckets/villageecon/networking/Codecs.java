@@ -33,4 +33,23 @@ public class Codecs {
     }
 
 
+    public static final FriendlyByteBuf encodeMayorOffersSync(MayorOffersSync object, FriendlyByteBuf buf) {
+        com.holybuckets.villageecon.menu.MayorTradeMenu.writeOffers(buf, object.getOffers());
+        buf.writeFloat(object.getReserveCurrency());
+        buf.writeUtf(object.getVillageName());
+        buf.writeFloat(object.getCurrencyDelta());
+        return buf;
+    }
+
+    public static final MayorOffersSync decodeMayorOffersSync(FriendlyByteBuf buf) {
+        int count = buf.readVarInt();
+        List<com.holybuckets.villageecon.menu.MayorTradeOffer> offers = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++)
+            offers.add(com.holybuckets.villageecon.menu.MayorTradeOffer.read(buf));
+        float reserveCurrency = buf.readFloat();
+        String villageName = buf.readUtf();
+        float currencyDelta = buf.readFloat();
+        return new MayorOffersSync(offers, reserveCurrency, villageName, currencyDelta);
+    }
+
 }

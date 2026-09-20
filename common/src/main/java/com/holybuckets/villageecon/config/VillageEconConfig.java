@@ -27,11 +27,16 @@ public class VillageEconConfig {
     public static final int DEF_CYCLE_LENGTH_DAYS = 16;
     public static final float DEF_MARKUP = 1f;
     public static final int STARTING_VILLAGE_LEVEL = 2;
+    public static final int DEF_START_PRODUCTION = 16;
+    public static final int DEF_START_PRODUCTION_AT_LEVEL = 1;
+    public static final float DEF_PRODUCTION_MULTIPLIER = 1f;
+    public static final float DEF_CONSUMPTION_FRACTION = 0.5f;
     public static final float DEF_INTEREST_MODIFIER = 1f;
     public static final float DEF_RESOURCE_MODIFIER = 1f;
     public static final int DEF_WEIGHT = 10;
     public static final float DEF_AGREEABLENESS = 0.5f;
     public static final String DEF_CURRENCY_ITEM = "minecraft:emerald";
+    public static final String DEF_GRAPH_MARKER_ITEM = "minecraft:ender_pearl";
 
 
     //** CONFIG FIELDS **//
@@ -54,22 +59,22 @@ public class VillageEconConfig {
 
     public static class DefaultEconomyConfigs {
 
-        @Comment("Default growthFactor: 2. Economic growth factor, scales the bonus reward granted to each village per cycle it meets its quota. At least 1, less than 10. Overridden by the value in the economy JSON config")
+        @Comment("Default growthFactor: 2. Economic growth factor, scales the bonus reward granted to each village per cycle it meets its quota. At least 1, less than 10")
         public float growthFactor = DEF_GROWTH_FACTOR;
 
         @Comment("Default demandDampeningFactor: 2. Rate at which demand falls off as a village's needs are met. Higher values slow down village to village trades.")
         public float demandDampeningFactor = DEF_DEMAND_DAMPENING_FACTOR;
 
-        @Comment("Default globalInterestRate: 1.1. Base daily interest rate applied to each village's reserve currency, before personality modifiers. Overridden by the value in the economy JSON config")
+        @Comment("Default globalInterestRate: 1.1. Base daily interest rate applied to each village's reserve currency, before personality modifiers")
         public float globalInterestRate = DEF_GLOBAL_INTEREST_RATE;
 
-        @Comment("Default basicResourceStartLevel: 5. Village level at which villages begin producing basic resources. Overridden by the value in the economy JSON config")
+        @Comment("Default basicResourceStartLevel: 5. Village level at which villages begin producing basic resources")
         public int basicResourceStartLevel = DEF_BASIC_RESOURCE_START_LEVEL;
 
-        @Comment("Default luxuryResourceStartLevel: 8. Village level at which villages begin producing their assigned luxury resources. Overridden by the value in the economy JSON config")
+        @Comment("Default luxuryResourceStartLevel: 8. Village level at which villages begin producing their assigned luxury resources")
         public int luxuryResourceStartLevel = DEF_LUXURY_RESOURCE_START_LEVEL;
 
-        @Comment("Default assignedLuxuryResourceCount: 2. Number of luxury resources assigned to each village from the weighted luxury pool. Overridden by the value in the economy JSON config")
+        @Comment("Default assignedLuxuryResourceCount: 2. Number of luxury resources assigned to each village from the weighted luxury pool")
         public int assignedLuxuryResourceCount = DEF_ASSIGNED_LUXURY_RESOURCE_COUNT;
 
         @Comment("Default cycleLengthDays: 16. Number of in-game days per economic cycle. Interest accrues daily; quotas, rewards and cycle modifiers are evaluated at each cycle end")
@@ -100,6 +105,9 @@ public class VillageEconConfig {
 
         @Comment("Item used as currency when a player trades resources with a village Mayor")
         public String currencyItem = DEF_CURRENCY_ITEM;
+
+        @Comment("Item sprite plotted for each past sale on the Mayor trade screen price graph")
+        public String graphMarkerItem = DEF_GRAPH_MARKER_ITEM;
 
         @Comment("Maximum stack size accepted by the Mayor trade screen submission slot")
         public int mayorTradeSlotCapacity = 999;

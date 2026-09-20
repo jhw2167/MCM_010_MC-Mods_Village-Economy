@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -42,7 +43,29 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
     private static final int OFFER_ITEM_Y = 2;
     private static final int OFFER_ARROW_Y = 6;
 
+    private static final int BANNER_Y = 6;
+    private static final int BANNER_MARGIN = 8;
+    private static final int BANNER_ICON_SIZE = 16;
+    /** Lifts the 16px item icon so its centre lines up with the 8px text baseline **/
+    private static final int BANNER_ICON_OFFSET = 4;
+
+    private static final int GRAPH_SALE_WINDOW = 16;
+    private static final int GRAPH_PADDING = 3;
+    /** Item sprites are 16px; markers are drawn at half scale so 16 fit across the graph **/
+    private static final float MARKER_SCALE = 0.5f;
+    private static final int MARKER_SIZE = (int) (16 * MARKER_SCALE);
+
+    private static final int LEDGER_Y = 78;
+    private static final int LEDGER_COLUMNS = 3;
+    private static final int LEDGER_ROW_HEIGHT = 18;
+
+    private static final int COLOR_GAIN = 0x2E8B2E;
+    private static final int COLOR_LOSS = 0xB03030;
+    private static final int COLOR_NEUTRAL = 0x808080;
+
     private static final int COLOR_TEXT = 0x404040;
+    /** Legacy formatting prefix; stack counts are drawn gold to mark them as stacks, not items **/
+    private static final String STACK_COUNT_PREFIX = "\u00A76";
     private static final int COLOR_ROW_SELECTED = 0xFFFFFFA0;
     private static final int COLOR_PLOT = 0xFF4CE04C;
     private static final int COLOR_PLOT_LOW = 0xFFE04C4C;
@@ -145,10 +168,52 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
         }
     }
 
+    /**
+     * Cycle ledger: what this village has traded away or taken on this cycle, laid out in
+     * three columns of item sprite plus signed delta. Currency leads, then each produced
+     * resource; resources the village cannot produce at its level are omitted.
+     */
+    private void renderCycleLedger(GuiGraphics gui)
+    {
+        int originX = this.leftPos + MayorTradeMenu.GRAPH_X;
+        int originY = this.topPos + LEDGER_Y;
+        int columnWidth = MayorTradeMenu.GRAPH_WIDTH / LEDGER_COLUMNS;
+
+        int slot = 0;
+        slot = renderLedgerEntry(gui, new ItemStack(ModConfig.getInstance().getCurrencyItem()),
+            Math.round(this.menu.getCurrencyDelta()), originX, originY, columnWidth, slot);
+
+        for (MayorTradeOffer offer : this.menu.getOffers()) {
+            if (!offer.producesResource()) continue;
+            slot = renderLedgerEntry(gui, offer.getIcon(), offer.getCycleDelta(),
+                originX, originY, columnWidth, slot);
+        }
+    }
+
+    private int renderLedgerEntry(GuiGraphics gui, ItemStack icon, int delta,
+        int originX, int originY, int columnWidth, int slot)
+    {
+        if (icon.isEmpty()) return slot;
+
+        int x = originX + (slot % LEDGER_COLUMNS) * columnWidth;
+        int y = originY + (slot / LEDGER_COLUMNS) * LEDGER_ROW_HEIGHT;
+
+        gui.pose().pushPose();
+        gui.pose().translate(0.0F, 0.0F, 100.0F);
+        gui.renderFakeItem(icon, x, y);
+        gui.pose().popPose();
+
+        int color = (delta > 0) ? COLOR_GAIN : (delta < 0) ? COLOR_LOSS : COLOR_NEUTRAL;
+        String label = (delta > 0 ? "+" : "") + delta;
+        gui.drawString(this.font, label, x + 18, y + 4, color, false);
+
+        return slot + 1;
+    }
+
     private void renderCount(GuiGraphics gui, ItemStack stack, int x, int y, int count) {
         if (stack.isEmpty()) return;
         gui.renderFakeItem(stack, x, y);
-        gui.renderItemDecorations(this.font, stack, x, y, String.valueOf(count));
+        gui.renderItemDecorations(this.font, stack, x, y, STACK_COUNT_PREFIX + count);
     }
 
     private void renderSelectionOutline(GuiGraphics gui, int x, int y) {
@@ -175,47 +240,52 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
         gui.fill(trackX, handleY, trackX + MayorTradeMenu.SCROLLBAR_WIDTH, handleY + handleHeight, COLOR_SCROLL);
     }
 
+    /**
+     * Plots the last GRAPH_SALE_WINDOW global sales of the selected resource as small dots,
+     * chronological left to right. The horizontal centre line is the current market rate D;
+     * the vertical scale is the largest deviation from D across the window, so the extreme
+     * sale sits GRAPH_PADDING pixels inside the top or bottom edge.
+     */
     private void renderGraph(GuiGraphics gui)
     {
+        MayorTradeOffer offer = this.menu.getSelected();
+        if (offer == null) return;
+
         int x = this.leftPos + MayorTradeMenu.GRAPH_X;
         int y = this.topPos + MayorTradeMenu.INV_Y;
         int w = MayorTradeMenu.GRAPH_WIDTH;
         int h = MayorTradeMenu.GRAPH_HEIGHT;
-
-        MayorTradeOffer offer = this.menu.getSelected();
-        if (offer == null) return;
-
-        float rate = MarketSalesCache.getRate(offer.getResourceId(), offer.getMarketRate());
-        List<Integer> sales = MarketSalesCache.getSales(offer.getResourceId());
-
         int midY = y + h / 2;
 
-        if (sales.isEmpty()) return;
+        float rate = MarketSalesCache.getRate(offer.getResourceId(), offer.getMarketRate());
+        List<Integer> all = MarketSalesCache.getSales(offer.getResourceId());
+        if (all.isEmpty()) return;
 
-        float maxDeviation = 1f;
+        List<Integer> sales = all.subList(Math.max(0, all.size() - GRAPH_SALE_WINDOW), all.size());
+
+        //Symmetric about D so the centre line stays the market rate
+        float halfRange = 1f;
         for (Integer price : sales)
-            maxDeviation = Math.max(maxDeviation, Math.abs(price - rate));
+            halfRange = Math.max(halfRange, Math.abs(price - rate));
 
-        int half = (h / 2) - 3;
+        int half = (h / 2) - GRAPH_PADDING - MARKER_SIZE / 2;
         int count = sales.size();
         int stepDenominator = Math.max(1, count - 1);
+        int span = w - 2 * GRAPH_PADDING - MARKER_SIZE;
 
-        int prevX = -1;
-        int prevY = -1;
+        ItemStack marker = new ItemStack(ModConfig.getInstance().getGraphMarkerItem());
+
         for (int i = 0; i < count; i++)
         {
             int price = sales.get(i);
-            int px = x + 2 + (w - 4) * i / stepDenominator;
-            int py = midY - Math.round(((price - rate) / maxDeviation) * half);
-            py = Math.max(y + 1, Math.min(y + h - 2, py));
+            int px = x + GRAPH_PADDING + (count == 1 ? span / 2 : span * i / stepDenominator);
+            int py = midY - Math.round(((price - rate) / halfRange) * half) - MARKER_SIZE / 2;
 
-            if (prevX >= 0) drawLine(gui, prevX, prevY, px, py, COLOR_PLOT);
-
-            int color = price >= rate ? COLOR_PLOT : COLOR_PLOT_LOW;
-            gui.fill(px - 1, py - 1, px + 2, py + 2, color);
-
-            prevX = px;
-            prevY = py;
+            gui.pose().pushPose();
+            gui.pose().translate(px, py, 200.0F);
+            gui.pose().scale(MARKER_SCALE, MARKER_SCALE, 1.0F);
+            gui.renderFakeItem(marker, 0, 0);
+            gui.pose().popPose();
         }
 
         String rateLabel = String.valueOf(Math.round(rate));
@@ -244,7 +314,30 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
 
     @Override
     protected void renderLabels(GuiGraphics gui, int mouseX, int mouseY) {
-        gui.drawString(this.font, this.title, MayorTradeMenu.TRADE_LIST_X + 12, 6, COLOR_TEXT, false);
+        gui.drawString(this.font, this.title, MayorTradeMenu.TRADE_LIST_X + 12, BANNER_Y, COLOR_TEXT, false);
+
+        Component reserve = Component.translatable("screen.hbs_village_econ.village_reserve",
+            Math.round(this.menu.getReserveCurrency()));
+
+        //Currency icon sits flush against the right edge, the amount immediately left of it
+        ItemStack currency = new ItemStack(ModConfig.getInstance().getCurrencyItem());
+        int iconX = this.imageWidth - BANNER_MARGIN - BANNER_ICON_SIZE;
+        int textX = iconX - 2 - this.font.width(reserve);
+
+        gui.drawString(this.font, reserve, textX, BANNER_Y, COLOR_TEXT, false);
+
+        gui.pose().pushPose();
+        gui.pose().translate(0.0F, 0.0F, 100.0F);
+        gui.renderFakeItem(currency, iconX, BANNER_Y - BANNER_ICON_OFFSET);
+        gui.pose().popPose();
+
+        //Village name centred between the title and the reserve readout
+        String village = this.menu.getVillageName();
+        if (village != null && !village.isBlank()) {
+            int centre = (MayorTradeMenu.TRADE_LIST_X + 12 + this.font.width(this.title) + textX) / 2;
+            gui.drawString(this.font, village,
+                centre - this.font.width(village) / 2, BANNER_Y, COLOR_TEXT, false);
+        }
     }
 
     @Override
@@ -265,6 +358,10 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
         super.render(gui, mouseX, mouseY, partialTick);
 
         renderOffers(gui);
+        if (this.menu.isGraphView()) {
+            renderGraph(gui);
+            renderCycleLedger(gui);
+        }
 
         for (TradeOfferButton button : this.tradeOfferButtons) {
             if (button == null) continue;

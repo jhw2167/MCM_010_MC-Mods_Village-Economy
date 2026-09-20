@@ -17,16 +17,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
     public static final String CLASS_ID = "010";
     public static final String DEF_CONFIG_FILE_PATH = VillageEconConfig.DEF_VILLAGE_ECONOMY_CONFIG_PATH;
 
-    //Global economy scalars
-    private float growthFactor;             //economic growth factor R scaling, at least 1, less than 10
-    private float demandDampeningFactor;    //Z - rate at which demand falls off when village needs are met
-    private float globalInterestRate;       //I - base interest rate for all villages, before modifiers
-
-    //Resources section scalars
-    private int basicResourceStartLevel;    //village level at which basic resources are produced
-    private int luxuryResourceStartLevel;   //village level at which luxury resources are produced
-    private int assignedLuxuryResourceCount;//number of luxuries assigned to each village
-
     private final Map<String, EconomyResource> staples = new LinkedHashMap<>();
     private final Map<String, EconomyResource> basics = new LinkedHashMap<>();
     private final Map<String, EconomyResource> luxuries = new LinkedHashMap<>();
@@ -36,13 +26,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
     //** Constructors **//
     public VillageEconomyJsonConfig() {
-        VillageEconConfig.DefaultEconomyConfigs defaults = ModConfig.getDefaults();
-        this.growthFactor = defaults.growthFactor;
-        this.demandDampeningFactor = defaults.demandDampeningFactor;
-        this.globalInterestRate = defaults.globalInterestRate;
-        this.basicResourceStartLevel = defaults.basicResourceStartLevel;
-        this.luxuryResourceStartLevel = defaults.luxuryResourceStartLevel;
-        this.assignedLuxuryResourceCount = defaults.assignedLuxuryResourceCount;
     }
 
     public VillageEconomyJsonConfig(String jsonString) {
@@ -52,18 +35,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
 
     //** Getters **//
-    public float getGrowthFactor() { return growthFactor; }
-
-    public float getDemandDampeningFactor() { return demandDampeningFactor; }
-
-    public float getGlobalInterestRate() { return globalInterestRate; }
-
-    public int getBasicResourceStartLevel() { return basicResourceStartLevel; }
-
-    public int getLuxuryResourceStartLevel() { return luxuryResourceStartLevel; }
-
-    public int getAssignedLuxuryResourceCount() { return assignedLuxuryResourceCount; }
-
     public Collection<EconomyResource> getResources(ResourceType type) {
         return switch (type) {
             case STAPLE -> Collections.unmodifiableCollection(staples.values());
@@ -124,14 +95,8 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
     public String serialize()
     {
         JsonObject root = new JsonObject();
-        root.addProperty("growthFactor", growthFactor);
-        root.addProperty("demandDampeningFactor", demandDampeningFactor);
-        root.addProperty("globalInterestRate", globalInterestRate);
 
         JsonObject resources = new JsonObject();
-        resources.addProperty("basicResourceStartLevel", basicResourceStartLevel);
-        resources.addProperty("luxuryResourceStartLevel", luxuryResourceStartLevel);
-        resources.addProperty("assignedLuxuryResourceCount", assignedLuxuryResourceCount);
         resources.add("staples", serializeResourcePool(staples));
         resources.add("basics", serializeResourcePool(basics));
         resources.add("luxuries", serializeResourcePool(luxuries));
@@ -170,34 +135,9 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
             throw new RuntimeException("Invalid JSON format for VillageEconomyJsonConfig", e);
         }
 
-        parseScalars(root);
         parseResources(root);
         parsePersonalities(root);
         parseCycleModifiers(root);
-    }
-
-    private void parseScalars(JsonObject root)
-    {
-        try {
-            if (root.has("growthFactor"))
-                this.growthFactor = root.get("growthFactor").getAsFloat();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "001", "Error parsing growthFactor. " + e.getMessage());
-        }
-
-        try {
-            if (root.has("demandDampeningFactor"))
-                this.demandDampeningFactor = root.get("demandDampeningFactor").getAsFloat();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "002", "Error parsing demandDampeningFactor. " + e.getMessage());
-        }
-
-        try {
-            if (root.has("globalInterestRate"))
-                this.globalInterestRate = root.get("globalInterestRate").getAsFloat();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "003", "Error parsing globalInterestRate. " + e.getMessage());
-        }
     }
 
     private void parseResources(JsonObject root)
@@ -207,27 +147,6 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
             return;
         }
         JsonObject resources = root.getAsJsonObject("resources");
-
-        try {
-            if (resources.has("basicResourceStartLevel"))
-                this.basicResourceStartLevel = resources.get("basicResourceStartLevel").getAsInt();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "005", "Error parsing basicResourceStartLevel. " + e.getMessage());
-        }
-
-        try {
-            if (resources.has("luxuryResourceStartLevel"))
-                this.luxuryResourceStartLevel = resources.get("luxuryResourceStartLevel").getAsInt();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "006", "Error parsing luxuryResourceStartLevel. " + e.getMessage());
-        }
-
-        try {
-            if (resources.has("assignedLuxuryResourceCount"))
-                this.assignedLuxuryResourceCount = resources.get("assignedLuxuryResourceCount").getAsInt();
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "007", "Error parsing assignedLuxuryResourceCount. " + e.getMessage());
-        }
 
         parseResourcePool(resources, "staples", ResourceType.STAPLE, staples);
         parseResourcePool(resources, "basics", ResourceType.BASIC, basics);
@@ -308,34 +227,29 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
 
         //Staples - bought and sold by villages at all levels
         EconomyResource OAK_LOG = new EconomyResource(ResourceType.STAPLE, "oak_log",
-            List.of(16, 16, 16, 24, 32, 48, 80, 160, 320, 320),
-            List.of(8, 8, 8, 12, 16, 24, 40, 80, 160, 160));
+            16, 1, 1.4f, 0.5f);
         OAK_LOG.setUseTagsRaw("#minecraft:logs");
 
         EconomyResource BREAD = new EconomyResource(ResourceType.STAPLE, "bread",
-            List.of(16, 16, 24, 32, 48, 64, 96, 160, 256, 256),
-            List.of(12, 12, 16, 24, 32, 48, 64, 96, 128, 128));
+            16, 1, 1.35f, 0.6f);
 
         config.staples.put(OAK_LOG.getResourceId(), OAK_LOG);
         config.staples.put(BREAD.getResourceId(), BREAD);
 
         //Basics - only produced by the village at basicResourceStartLevel and up
         EconomyResource IRON = new EconomyResource(ResourceType.BASIC, "iron_ingot",
-            List.of(0, 0, 0, 0, 8, 12, 16, 24, 32, 48),
-            List.of(2, 2, 4, 4, 8, 8, 12, 16, 24, 24));
+            8, 5, 1.2f, 0.5f);
         config.basics.put(IRON.getResourceId(), IRON);
 
         //Luxuries - only produced at luxuryResourceStartLevel and up, assigned per village by weight
         EconomyResource GOLD = new EconomyResource(ResourceType.LUXURY, "gold_ingot",
-            List.of(0, 0, 0, 0, 0, 0, 0, 8, 12, 16),
-            List.of(0, 0, 0, 0, 1, 2, 2, 4, 6, 8));
+            8, 8, 1.1f, 0.5f);
         GOLD.setWeight(20);
         GOLD.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation("desert"));
         GOLD.getBiomeWhiteList().add(HBUtil.LevelUtil.toBiomeResourceLocation("badlands"));
 
         EconomyResource CAKE = new EconomyResource(ResourceType.LUXURY, "cake",
-            List.of(0, 0, 0, 0, 0, 0, 0, 4, 8, 12),
-            List.of(0, 0, 0, 0, 1, 1, 2, 2, 4, 6));
+            4, 8, 1.15f, 0.5f);
         CAKE.setWeight(10);
         CAKE.getBiomeBlackList().add(HBUtil.LevelUtil.toBiomeResourceLocation("desert"));
         CAKE.getBiomeBlackList().add(HBUtil.LevelUtil.toBiomeResourceLocation("badlands"));

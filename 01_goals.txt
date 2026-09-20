@@ -1,4 +1,28 @@
-Requirements
+Goals
 ---
+
+1. Fix In Game economy Graph
+---
+	- Add better item texture for graph registration
+	- Add graph trading texture
+
+2. Make sure level up works and clears resources after level up
+---
+
+
+3. Check that serializing and deserializing villages work
+
+
+
+4. Explore Pricing fine tuning by simulating future product prices and production against economy price
+
+
+
+5. Improve mayor villagers
+---
+	- particle effects on level up
+	- better texture design
+
+6.
 
 

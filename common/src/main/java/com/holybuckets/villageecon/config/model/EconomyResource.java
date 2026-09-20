@@ -1,7 +1,6 @@
 package com.holybuckets.villageecon.config.model;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.villageecon.LoggerProject;
@@ -14,9 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class EconomyResource {
@@ -26,15 +23,14 @@ public class EconomyResource {
 
     public enum ResourceType { STAPLE, BASIC, LUXURY }
 
-    public static final List<Integer> DEF_PRODUCTION = List.of(16, 16, 16, 24, 32, 48, 80, 160, 320, 320);
-    public static final List<Integer> DEF_CONSUMPTION = List.of(8, 8, 8, 12, 16, 24, 40, 80, 160, 160);
-
     private final ResourceType type;
-    private final String itemIdRaw;         //serialized item name, e.g. "oak_log"
-    private String useTagsRaw;              //serialized tag, e.g. "#minecraft:logs", accepts any item in tag for exchange
-    private List<Integer> production;       //base production Rho, indexed by village level
-    private List<Integer> consumption;      //base consumption, indexed by village level
-    private int weight;                     //luxury only: weight against total pool for village assignment
+    private final String itemIdRaw;
+    private String useTagsRaw;
+    private int startProduction;            //base production Rho at startProductionAtLevel
+    private int startProductionAtLevel;     //village level at which this resource first produces
+    private float productionMultiplier;
+    private float consumptionFraction;
+    private int weight;
     private final Set<ResourceLocation> biomeWhiteList = new HashSet<>();
     private final Set<ResourceLocation> biomeBlackList = new HashSet<>();
 
@@ -47,15 +43,20 @@ public class EconomyResource {
     public EconomyResource(ResourceType type, String itemIdRaw) {
         this.type = (type == null) ? ResourceType.STAPLE : type;
         this.itemIdRaw = (itemIdRaw == null) ? "" : itemIdRaw.trim();
-        this.production = new ArrayList<>(DEF_PRODUCTION);
-        this.consumption = new ArrayList<>(DEF_CONSUMPTION);
+        this.startProduction = VillageEconConfig.DEF_START_PRODUCTION;
+        this.startProductionAtLevel = VillageEconConfig.DEF_START_PRODUCTION_AT_LEVEL;
+        this.productionMultiplier = VillageEconConfig.DEF_PRODUCTION_MULTIPLIER;
+        this.consumptionFraction = VillageEconConfig.DEF_CONSUMPTION_FRACTION;
         this.weight = VillageEconConfig.DEF_WEIGHT;
     }
 
-    public EconomyResource(ResourceType type, String itemIdRaw, List<Integer> production, List<Integer> consumption) {
+    public EconomyResource(ResourceType type, String itemIdRaw, int startProduction,
+        int startProductionAtLevel, float productionMultiplier, float consumptionFraction) {
         this(type, itemIdRaw);
-        if (production != null && !production.isEmpty()) this.production = new ArrayList<>(production);
-        if (consumption != null && !consumption.isEmpty()) this.consumption = new ArrayList<>(consumption);
+        setStartProduction(startProduction);
+        setStartProductionAtLevel(startProductionAtLevel);
+        setProductionMultiplier(productionMultiplier);
+        setConsumptionFraction(consumptionFraction);
     }
 
 
@@ -63,7 +64,7 @@ public class EconomyResource {
 
     public ResourceType getType() { return type; }
 
-    /** Unique id of this resource on the market; the raw item name as written in JSON **/
+
     public String getResourceId() { return itemIdRaw; }
 
     public String getUseTagsRaw() { return useTagsRaw; }
@@ -80,26 +81,86 @@ public class EconomyResource {
 
     public Set<ResourceLocation> getBiomeBlackList() { return biomeBlackList; }
 
-    /** Base production Rho for the given village level (1-indexed). Clamps to the last configured entry **/
+    public int getStartProduction() { return startProduction; }
+
+    public int getStartProductionAtLevel() { return startProductionAtLevel; }
+
+    public float getProductionMultiplier() { return productionMultiplier; }
+
+    public float getConsumptionFraction() { return consumptionFraction; }
+
+    public int getStartLevel() {
+        return startProductionAtLevel;
+    }
+
+    public boolean producesAt(int level) {
+        return level >= startProductionAtLevel;
+    }
+
+    /** takes village level, NOT village index, so add 1 in argument */
     public int productionAt(int level) {
-        return levelIndexed(production, level);
+        if(type==ResourceType.STAPLE) {
+            if (level <= startProductionAtLevel)
+                return startProduction;
+        }
+        if (!producesAt(level)) return 0;
+        int steps = level - startProductionAtLevel;
+        return Math.round(startProduction * (float) Math.pow(productionMultiplier, steps));
     }
 
-    /** Base consumption for the given village level (1-indexed). Clamps to the last configured entry **/
     public int consumptionAt(int level) {
-        return levelIndexed(consumption, level);
+        return Math.round(productionAt(level) * consumptionFraction);
     }
 
-    private static int levelIndexed(List<Integer> arr, int level) {
-        if (arr == null || arr.isEmpty()) return 0;
-        int i = Math.max(0, Math.min(level - 1, arr.size() - 1));
-        return arr.get(i);
+
+    public int netProductionAt(int level) {
+        return productionAt(level) - consumptionAt(level);
     }
 
 
     //** Setters / mutation used during deserialization **//
 
     public void setUseTagsRaw(String useTagsRaw) { this.useTagsRaw = useTagsRaw; }
+
+    public void setStartProduction(Integer startProduction) {
+        if (startProduction == null || startProduction < 0) {
+            LoggerProject.logWarning(CLASS_ID + "010", "Invalid startProduction for resource: " + itemIdRaw
+                + ". Using default value of " + VillageEconConfig.DEF_START_PRODUCTION);
+            this.startProduction = VillageEconConfig.DEF_START_PRODUCTION;
+            return;
+        }
+        this.startProduction = startProduction;
+    }
+
+    public void setStartProductionAtLevel(Integer startProductionAtLevel) {
+        if (startProductionAtLevel == null || startProductionAtLevel < 0) {
+            LoggerProject.logWarning(CLASS_ID + "014", "Invalid startProductionAtLevel for resource: " + itemIdRaw
+                + ". Using default value of " + VillageEconConfig.DEF_START_PRODUCTION_AT_LEVEL);
+            this.startProductionAtLevel = VillageEconConfig.DEF_START_PRODUCTION_AT_LEVEL;
+            return;
+        }
+        this.startProductionAtLevel = startProductionAtLevel;
+    }
+
+    public void setProductionMultiplier(Float productionMultiplier) {
+        if (productionMultiplier == null || productionMultiplier <= 0f) {
+            LoggerProject.logWarning(CLASS_ID + "011", "Invalid productionMultiplier for resource: " + itemIdRaw
+                + ". Using default value of " + VillageEconConfig.DEF_PRODUCTION_MULTIPLIER);
+            this.productionMultiplier = VillageEconConfig.DEF_PRODUCTION_MULTIPLIER;
+            return;
+        }
+        this.productionMultiplier = productionMultiplier;
+    }
+
+    public void setConsumptionFraction(Float consumptionFraction) {
+        if (consumptionFraction == null || consumptionFraction < 0f || consumptionFraction > 1f) {
+            LoggerProject.logWarning(CLASS_ID + "012", "Invalid consumptionFraction for resource: " + itemIdRaw
+                + ". Using default value of " + VillageEconConfig.DEF_CONSUMPTION_FRACTION);
+            this.consumptionFraction = VillageEconConfig.DEF_CONSUMPTION_FRACTION;
+            return;
+        }
+        this.consumptionFraction = consumptionFraction;
+    }
 
     public void setWeight(Integer weight) {
         if (weight == null || weight < 0) {
@@ -114,7 +175,6 @@ public class EconomyResource {
 
     //** Hydration and validation **//
 
-    /** Resolves the raw item / tag strings against registries; called at beforeServerStarted **/
     public void hydrate() {
         this.item = HBUtil.ItemUtil.itemNameToItem(itemIdRaw);
         if (useTagsRaw != null && !useTagsRaw.isBlank())
@@ -161,13 +221,10 @@ public class EconomyResource {
         if (useTagsRaw != null && !useTagsRaw.isBlank())
             obj.addProperty("useTags", useTagsRaw);
 
-        JsonArray prod = new JsonArray();
-        production.forEach(prod::add);
-        obj.add("production", prod);
-
-        JsonArray cons = new JsonArray();
-        consumption.forEach(cons::add);
-        obj.add("consumption", cons);
+        obj.addProperty("startProduction", startProduction);
+        obj.addProperty("startProductionAtLevel", startProductionAtLevel);
+        obj.addProperty("productionMultiplier", productionMultiplier);
+        obj.addProperty("consumptionFraction", consumptionFraction);
 
         if (type == ResourceType.LUXURY)
             obj.addProperty("weight", weight);
@@ -203,19 +260,35 @@ public class EconomyResource {
         }
 
         try {
-            List<Integer> prod = parseIntArray(obj, "production");
-            if (prod != null) resource.production = prod;
+            if (obj.has("startProduction"))
+                resource.setStartProduction(obj.get("startProduction").getAsInt());
         } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "004", "Error parsing production array for resource: " + itemId
-                + ". Using default values. " + e.getMessage());
+            LoggerProject.logError(CLASS_ID + "004", "Error parsing startProduction for resource: " + itemId
+                + ". Using default value. " + e.getMessage());
         }
 
         try {
-            List<Integer> cons = parseIntArray(obj, "consumption");
-            if (cons != null) resource.consumption = cons;
+            if (obj.has("startProductionAtLevel"))
+                resource.setStartProductionAtLevel(obj.get("startProductionAtLevel").getAsInt());
         } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "005", "Error parsing consumption array for resource: " + itemId
-                + ". Using default values. " + e.getMessage());
+            LoggerProject.logError(CLASS_ID + "015", "Error parsing startProductionAtLevel for resource: " + itemId
+                + ". Using default value. " + e.getMessage());
+        }
+
+        try {
+            if (obj.has("productionMultiplier"))
+                resource.setProductionMultiplier(obj.get("productionMultiplier").getAsFloat());
+        } catch (Exception e) {
+            LoggerProject.logError(CLASS_ID + "005", "Error parsing productionMultiplier for resource: " + itemId
+                + ". Using default value. " + e.getMessage());
+        }
+
+        try {
+            if (obj.has("consumptionFraction"))
+                resource.setConsumptionFraction(obj.get("consumptionFraction").getAsFloat());
+        } catch (Exception e) {
+            LoggerProject.logError(CLASS_ID + "013", "Error parsing consumptionFraction for resource: " + itemId
+                + ". Using default value. " + e.getMessage());
         }
 
         try {
@@ -229,19 +302,6 @@ public class EconomyResource {
         parseBiomeList(obj, "biomeBlackList", resource.biomeBlackList, itemId);
 
         return resource;
-    }
-
-    @Nullable
-    private static List<Integer> parseIntArray(JsonObject obj, String property) {
-        if (!obj.has(property) || !obj.get(property).isJsonArray()) return null;
-        JsonArray arr = obj.getAsJsonArray(property);
-        if (arr.isEmpty()) return null;
-        List<Integer> values = new ArrayList<>();
-        for (JsonElement e : arr) {
-            int v = e.getAsInt();
-            values.add(Math.max(0, v));
-        }
-        return values;
     }
 
     static void parseBiomeList(JsonObject obj, String property, Set<ResourceLocation> target, String ownerId) {

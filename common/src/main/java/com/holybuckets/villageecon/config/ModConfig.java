@@ -71,9 +71,7 @@ public class ModConfig {
         float base = getDefaults().startingReserveCurrency;
         if (base <= 0f) return 0f;
 
-        float growthFactor = (economyConfig != null)
-            ? economyConfig.getGrowthFactor()
-            : getDefaults().growthFactor;
+        float growthFactor = getDefaults().growthFactor;
         if (growthFactor <= 0f) return base;
 
         int steps = villageLevel - VillageEconConfig.STARTING_VILLAGE_LEVEL;
@@ -132,6 +130,12 @@ public class ModConfig {
     public Item getCurrencyItem() {
         Item item = HBUtil.ItemUtil.itemNameToItem(getBalmConfig().tradeConfigs.currencyItem);
         return (item != null) ? item : Items.EMERALD;
+    }
+
+    /** Sprite plotted for each historical sale on the trade screen price graph **/
+    public Item getGraphMarkerItem() {
+        Item item = HBUtil.ItemUtil.itemNameToItem(getBalmConfig().tradeConfigs.graphMarkerItem);
+        return (item != null) ? item : Items.ENDER_PEARL;
     }
 
     public int getMayorTradeSlotCapacity() {
@@ -230,7 +234,7 @@ public class ModConfig {
     private void validateLuxuryPool()
     {
         int poolSize = economyConfig.getResources(ResourceType.LUXURY).size();
-        int assigned = economyConfig.getAssignedLuxuryResourceCount();
+        int assigned = getDefaults().assignedLuxuryResourceCount;
         if (assigned > poolSize) {
             LoggerProject.logWarning("011005",
                 "assignedLuxuryResourceCount (" + assigned + ") exceeds the luxury pool size ("

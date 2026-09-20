@@ -151,14 +151,14 @@ public class VillageEconTradeSimulator {
     public static boolean runDailyProcess(ServerLevel level) {
         Mayor mayor = firstMayor(level);
         if (mayor == null) return false;
-        mayor.dailyProcess();
+        VillageManager.get(level).dailyProcess();
         return true;
     }
 
     public static boolean runCycleProcess(ServerLevel level) {
         Mayor mayor = firstMayor(level);
         if (mayor == null) return false;
-        mayor.cycleProcess();
+        VillageManager.get(level).cycleProcess();
         return true;
     }
 
@@ -180,7 +180,6 @@ public class VillageEconTradeSimulator {
         StringBuilder sb = new StringBuilder();
         sb.append("Village ").append(mayor.getVillageChunkId())
           .append(" level ").append(mayor.getVillageLevel())
-          .append(" alive=").append(mayor.isAlive())
           .append(" currency=").append(String.format("%.1f", ledger.getCurrency()))
           .append("\nCycle day ").append(manager.getDayOfCycle())
           .append(" of cycle ").append(manager.getCycleIndex())
@@ -217,7 +216,6 @@ public class VillageEconTradeSimulator {
         for (Mayor mayor : manager.getMayors().values()) {
             sb.append("\n  ").append(mayor.getVillageChunkId())
               .append(" level ").append(mayor.getVillageLevel())
-              .append(" alive=").append(mayor.isAlive())
               .append(" entityLoaded=").append(mayor.isEntityLoaded());
         }
         return sb.toString();

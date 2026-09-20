@@ -306,7 +306,7 @@ public class VillageManager {
 
         //calculate demand for all villages, proccess trades by flushing markets
         for (Mayor mayor : mayors.values()) {
-            if (mayor.isAlive()) mayor.tickProcess();
+            mayor.tickProcess();
         }
         Bazaar bazaar = Bazaar.get(level);
         if (bazaar != null) bazaar.flushMarkets();
@@ -335,11 +335,13 @@ public class VillageManager {
     }
 
     //Daily process involves reconciling the ledgers for each village
-    private void dailyProcess()
+    public void dailyProcess()
     {
         for (Mayor mayor : mayors.values()) {
-            if (mayor.isAlive()) mayor.dailyProcess();
+            mayor.dailyProcess();
         }
+
+
         dayOfCycle++;
         int cycleLength = ModConfig.getDefaults().cycleLengthDays;
         if (dayOfCycle >= cycleLength) {
@@ -349,19 +351,16 @@ public class VillageManager {
         }
     }
 
-    /** each cycle: reconcile ledgers, schedule and execute trades, rewards, level ups, new modifiers **/
-    private void cycleProcess()
+    public void cycleProcess()
     {
         LoggerProject.logInfo("012002", "Processing economy cycle " + cycleIndex
             + " for " + mayors.size() + " village(s)");
 
         for (Mayor mayor : mayors.values()) {
-            if (mayor.isAlive()) mayor.cycleProcess();
+            mayor.cycleProcess();
         }
 
-        //Match and execute the trades scheduled by each village's cycleProcess
         TradeEngine.executeScheduledTrades();
-
         syncVillageChunks();
     }
 
