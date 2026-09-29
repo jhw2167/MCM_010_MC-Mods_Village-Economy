@@ -76,7 +76,7 @@ public class EconomyMath {
         float gainedInterest = s * mrkRt * interest;
         double lostMarketValue =  -Math.exp(-z*quotaFrct) * (s * favor * mrkRt);
 
-        float lostQuotaBonus = (overSupply >= 1 && s > overSupply ? 1 : 0) * -s*growthReward();;
+        float lostQuotaBonus = (overSupply >= 1 && s > overSupply ? 1 : 0) * -s* growthRewardPerResource();;
         return gainedInterest + (float) lostMarketValue + lostQuotaBonus;
     }
 
@@ -91,11 +91,11 @@ public class EconomyMath {
 
         float minQuotaFraction = quotaFraction(vLevel, 1, resource);
         float weightedQuotaFrct = (minQuotaFraction*growthRate + quotaFrct ) / (growthRate + 1);
-        float gainedQuotaBonus = (overSupply > 0 ? 0 : 1) * s * growthReward() * weightedQuotaFrct;
+        float gainedQuotaBonus = (overSupply > 0 ? 0 : 1) * s * growthRewardPerResource() * weightedQuotaFrct;
         return lostInterest + (float) gainedMarketValue + gainedQuotaBonus;
     }
 
-    public static float growthReward() {
+    public static float growthRewardPerResource() {
         float totalCurrency = MarketState.totalCurrency();
         float growthFactor = ModConfig.getDefaults().growthFactor;
         int totalResourcesTraded = INSTANCE.market.getTotalResourceTrades();

@@ -19,6 +19,8 @@ public class MarketRate {
         this.window = Math.max(1, window);
     }
 
+    public int getWindow() { return window; }
+
     public void seed(float initialRate) {
         samples.clear();
         for (int i = 0; i < window; i++)

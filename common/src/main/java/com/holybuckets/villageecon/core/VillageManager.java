@@ -2,6 +2,7 @@ package com.holybuckets.villageecon.core;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
@@ -24,6 +25,7 @@ import com.holybuckets.villageecon.core.model.Mayor;
 import com.holybuckets.villageecon.core.model.VillageEconomyChunk;
 import com.holybuckets.villageecon.core.trade.Bazaar;
 import com.holybuckets.villageecon.core.trade.Market;
+import com.holybuckets.villageecon.core.trade.TransactionLog;
 import com.holybuckets.villageecon.menu.MayorTradeMenu;
 import com.holybuckets.villageecon.menu.MayorTradeOffer;
 import com.holybuckets.villageecon.networking.LedgerSalesSync;
@@ -64,31 +66,40 @@ public class VillageManager {
     private static final String KEY_CYCLE_INDEX = "cycleIndex";
     private static final String KEY_MAYORS_TO_RELOAD = "mayorsToReload";
     private static final String KEY_VILLAGE_CHUNKS = "villageChunks";
+    private static final String KEY_MARKET_RATES = "marketRates";
+
+    /** Times a restored rate is re-applied, so it fully saturates the moving average **/
+    private static final int MARKET_RATE_SEED_SAMPLES = 20;
 
     //** STATICS
     /** One manager instance per level **/
     static final Map<LevelAccessor, VillageManager> MANAGERS = new HashMap<>();
+
     static ModConfig MOD_CONFIG;
     static GeneralConfig GENERAL_CONFIG;
     public static Random RANDOM;
+    public static Mayor INDEPENDENT_MAYOR;
 
     //** VARIABLES
     private final ServerLevel level;
     private final Map<ChunkPos, VillageEconomyChunk> villages;
     private final ManagedChunkUtility chunkUtil;
 
-    /** Mayors held in RAM for the life of the server, keyed by village chunk **/
     private final Map<ChunkPos, Mayor> mayors;
-
-    /** Villages whose mayor died; a new mayor spawns on the next cycle **/
     private final Set<ChunkPos> villagesWithDeadOrLostMayors;
-
-    /** Every known village chunk, persisted so mayors can be rehydrated on restart **/
     private final Map<MayorEntity, BlockPos> mayorEntities;
     private final Set<ChunkPos> persistedMayorChunkpos;
 
+    /** resourceId to market rate, read at load and applied once the Bazaar exists **/
+    private final Map<String, Float> persistedMarketRates = new LinkedHashMap<>();
+
     private boolean initialSyncDone;
     private int syncIndex;
+
+    //FLAG - is this the best way to do this?
+    private static final int REPLAY_GRACE_ATTEMPTS = 5;
+    private boolean transactionsReplayed;
+    private int replayAttempts;
 
     private int dayOfCycle;
     private long cycleIndex;
@@ -111,14 +122,12 @@ public class VillageManager {
 
     //** GETTERS **//
 
-    /** Manager for the given level **/
     @Nullable
     public static VillageManager get(LevelAccessor level) {
         if (level == null) return null;
         return MANAGERS.get(level);
     }
 
-    /** Convenience accessor for the overworld manager **/
     @Nullable
     public static VillageManager getInstance() {
         if (GENERAL_CONFIG == null) return null;
@@ -157,7 +166,6 @@ public class VillageManager {
         return villages.get(pos);
     }
 
-    /** V - total number of villages discovered so far **/
     public int getVillageCount() {
         return villages.size();
     }
@@ -231,6 +239,7 @@ public class VillageManager {
         Mayor mayor = new Mayor(level, tag);
         mayor.setVillageChunkId(villageChunkId);
         mayor.attachEntity(entity);
+        mayor.syncLedgersToEntity(entity);
         mayors.put(pos, mayor);
     }
 
@@ -304,6 +313,9 @@ public class VillageManager {
             initialSyncDone = true;
         }
 
+        attemptTransactionReplay();
+        simulationProcess();
+
         //calculate demand for all villages, proccess trades by flushing markets
         for (Mayor mayor : mayors.values()) {
             mayor.tickProcess();
@@ -313,6 +325,10 @@ public class VillageManager {
 
         syncOpenTradeScreens(bazaar);
     }
+
+
+
+
 
     private void syncOpenTradeScreens(Bazaar bazaar)
     {
@@ -334,6 +350,41 @@ public class VillageManager {
         }
     }
 
+    /**
+     * Replays journal from the previous day, since each day the mayor's transactions are synced
+     * with the entitity's theo ledger.
+     */
+    private void attemptTransactionReplay()
+    {
+        if (transactionsReplayed) return;
+
+        TransactionLog log = TransactionLog.get(level);
+        if (log == null) { transactionsReplayed = true; return; }
+
+        boolean allResolved = mayors.keySet().containsAll(persistedMayorChunkpos);
+        replayAttempts++;
+
+        if (!allResolved && replayAttempts < REPLAY_GRACE_ATTEMPTS) return;
+
+        if (!allResolved) {
+            LoggerProject.logWarning("012006", "Replaying transactions with "
+                + (persistedMayorChunkpos.size() - mayors.size()) + " village(s) still unresolved");
+        }
+
+        log.replay(this);
+        transactionsReplayed = true;
+    }
+
+
+    private void snapshotLedgersToEntities()
+    {
+        for (Mayor mayor : mayors.values()) {
+            MayorEntity entity = mayor.getEntity();
+            if (entity != null) mayor.syncLedgersToEntity(entity);
+        }
+    }
+
+
     //Daily process involves reconciling the ledgers for each village
     public void dailyProcess()
     {
@@ -341,6 +392,8 @@ public class VillageManager {
             mayor.dailyProcess();
         }
 
+        Bazaar bazaar = Bazaar.get(level);
+        if (bazaar != null) bazaar.clearDummyTrades();
 
         dayOfCycle++;
         int cycleLength = ModConfig.getDefaults().cycleLengthDays;
@@ -349,6 +402,11 @@ public class VillageManager {
             dayOfCycle = 0;
             cycleIndex++;
         }
+
+        //Snapshot last: the entities now hold everything the journal was covering
+        snapshotLedgersToEntities();
+        TransactionLog log = TransactionLog.get(level);
+        if (log != null) log.rollOver();
     }
 
     public void cycleProcess()
@@ -362,7 +420,39 @@ public class VillageManager {
 
         TradeEngine.executeScheduledTrades();
         syncVillageChunks();
+        enterpriser=null;
     }
+
+
+    /**
+     * Chooses a Mayor at random and simulates village earnings and production
+     * over the course of a few cycles to determine profitability. Then tweaks
+     * demand and sell tendencies to maximize expectation.
+     */
+    private static final int SIMS_PER_CYCLE = 20;
+    private int simsCount=0;
+    private Iterator<Mayor> enterpriser;
+    private void simulationProcess()
+    {
+
+        if(enterpriser==null) {
+            simsCount++;
+            enterpriser = mayors.values().iterator();
+            return;
+        }
+
+        if(!enterpriser.hasNext()) {
+            if(simsCount >= SIMS_PER_CYCLE) return;
+            simsCount++;
+            enterpriser = mayors.values().iterator();
+            return;
+        }
+
+        Mayor mayor = enterpriser.next();
+        MayorSimulator simulator = new MayorSimulator(mayor, RANDOM);
+        simulator.processEnterpriser();
+    }
+
 
     /**
      * Force loads every village chunk so immutable village state stays in step with
@@ -402,6 +492,8 @@ public class VillageManager {
         persistedMayorChunkpos.clear();
         loadChunkPosSet(worldData, KEY_VILLAGE_CHUNKS, persistedMayorChunkpos);
 
+        loadMarketRates(worldData);
+
         LoggerProject.logDebug("012003", "Loaded cycle state: day " + dayOfCycle
             + " of cycle " + cycleIndex + "; " + villagesWithDeadOrLostMayors.size() + " mayor(s) queued for respawn");
     }
@@ -418,6 +510,11 @@ public class VillageManager {
             .map(ChunkPos::new)
             .collect(Collectors.toSet());
         worldData.addProperty(key(KEY_VILLAGE_CHUNKS), toChunkIdArray(known));
+
+        worldData.addProperty(key(KEY_MARKET_RATES), marketRatesToJson());
+
+        TransactionLog log = TransactionLog.get(level);
+        if (log != null) log.save(ds);
     }
 
 
@@ -434,6 +531,59 @@ public class VillageManager {
                         + ": " + entry + ". " + e.getMessage());
                 }
             }
+        }
+
+        private JsonObject marketRatesToJson()
+        {
+            JsonObject rates = new JsonObject();
+            Bazaar bazaar = Bazaar.get(level);
+            if (bazaar == null) return rates;
+
+            for (Market market : bazaar.getMarkets()) {
+                float rate = market.rate();
+                if (rate > 0f) rates.addProperty(market.getResourceId(), rate);
+            }
+            return rates;
+        }
+
+        private void loadMarketRates(WorldSaveData worldData)
+        {
+            persistedMarketRates.clear();
+
+            JsonElement el = worldData.get(key(KEY_MARKET_RATES));
+            if (el == null || !el.isJsonObject()) return;
+
+            for (Map.Entry<String, JsonElement> entry : el.getAsJsonObject().entrySet()) {
+                try {
+                    persistedMarketRates.put(entry.getKey(), entry.getValue().getAsFloat());
+                } catch (Exception e) {
+                    LoggerProject.logWarning("012007", "Could not parse market rate for "
+                        + entry.getKey() + ": " + entry.getValue() + ". " + e.getMessage());
+                }
+            }
+
+            LoggerProject.logDebug("012008",
+                "Loaded " + persistedMarketRates.size() + " persisted market rate(s)");
+        }
+
+        /**
+         * Re-applies the saved rates to a freshly built Bazaar. Each is seeded repeatedly so
+         * it saturates the moving average and the visible sale history, otherwise the first
+         * trade after a restart would drag the rate straight back toward the r/q default.
+         */
+        public void restoreMarketRates(Bazaar bazaar)
+        {
+            if (bazaar == null || persistedMarketRates.isEmpty()) return;
+
+            int restored = 0;
+            for (Market market : bazaar.getMarkets()) {
+                Float rate = persistedMarketRates.get(market.getResourceId());
+                if (rate == null || rate <= 0f) continue;
+                market.seed(rate, MARKET_RATE_SEED_SAMPLES);
+                restored++;
+            }
+
+            LoggerProject.logInfo("012009", "Restored " + restored + " market rate(s) from the datastore");
         }
 
         private static JsonArray toChunkIdArray(Set<ChunkPos> positions)
@@ -457,7 +607,7 @@ public class VillageManager {
         if(manager.mayorEntities.containsKey(mayorEntity)) {
             manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
             Mayor mayor = manager.getMayor(villageChunkId);
-            if (mayor != null) mayor.syncData(mayorEntity);
+            if (mayor != null) mayor.syncLedgersToEntity(mayorEntity);
             return;
         }
 
@@ -510,10 +660,12 @@ public class VillageManager {
 
     private static void onServerStart(ServerStartingEvent event) {
         MANAGERS.clear();
+        TransactionLog.clearAll();
         GENERAL_CONFIG = GeneralConfig.getInstance();
         MOD_CONFIG = ModConfig.getInstance();
         VillageEconomyChunk.MOD_CONFIG = ModConfig.getInstance();
         RANDOM = new Random(GENERAL_CONFIG.getWorldSeed());
+        INDEPENDENT_MAYOR=null;
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
@@ -524,6 +676,7 @@ public class VillageManager {
             manager.persistedMayorChunkpos.clear();
         }
         MANAGERS.clear();
+        TransactionLog.clearAll();
     }
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
@@ -533,8 +686,13 @@ public class VillageManager {
 
         VillageManager manager = new VillageManager((ServerLevel) event.getLevel());
         manager.load(GeneralConfig.getInstance().getDataStore());
+        TransactionLog.init((ServerLevel) event.getLevel())
+            .load(GeneralConfig.getInstance().getDataStore());
         Bazaar bazaar = new Bazaar((ServerLevel) event.getLevel());
+        manager.restoreMarketRates(bazaar);
         MarketState.init(manager, bazaar);
+        if(INDEPENDENT_MAYOR == null)
+            INDEPENDENT_MAYOR = Mayor.dummyMayor(GeneralConfig.OVERWORLD);
     }
 
     private static void onChunkLoad(ChunkLoadingEvent.Load event) {

@@ -30,16 +30,17 @@ public class MayorMenuProvider implements BalmMenuProvider {
     public AbstractContainerMenu createMenu(int syncId, Inventory inventory, Player player) {
         float reserve = (mayor != null) ? mayor.getStaticLedger().getCurrency() : 0f;
         String name = (mayor != null) ? mayor.getName() : "";
-        return new MayorTradeMenu(syncId, inventory, mayor, MayorTradeMenu.buildOffers(mayor), reserve, name,
-            MayorTradeMenu.currencyDelta(mayor));
+        float delta = (mayor != null) ? mayor.currencyDiff() : 0f;
+        return new MayorTradeMenu(syncId, inventory, mayor, MayorTradeMenu.buildOffers(mayor), reserve, name, delta);
     }
 
     @Override
     public void writeScreenOpeningData(ServerPlayer player, FriendlyByteBuf buf) {
         List<MayorTradeOffer> offers = MayorTradeMenu.buildOffers(mayor);
         MayorTradeMenu.writeOffers(buf, offers);
+
         buf.writeFloat((mayor != null) ? mayor.getStaticLedger().getCurrency() : 0f);
         buf.writeUtf((mayor != null) ? mayor.getName() : "");
-        buf.writeFloat(MayorTradeMenu.currencyDelta(mayor));
+        buf.writeFloat((mayor != null) ? mayor.currencyDiff() : 0f);
     }
 }

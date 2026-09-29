@@ -3,5 +3,6 @@
   "menu.hbs_village_econ.mayor_trade": "Quotas (Stacks)",
   "screen.hbs_village_econ.inventory": "Trade",
   "screen.hbs_village_econ.graph": "Graph",
-  "screen.hbs_village_econ.village_reserve": "Reserve: %s"
+  "screen.hbs_village_econ.village_reserve": "Reserve: %s",
+  "item.hbs_village_econ.dot": "Dot"
 }

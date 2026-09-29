@@ -1,5 +1,6 @@
 package com.holybuckets.villageecon.menu;
 
+import com.holybuckets.villageecon.config.model.EconomyResource;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -15,7 +16,7 @@ public class MayorTradeOffer {
     private final boolean produces;    //village produces this resource at its current level
 
     public MayorTradeOffer(String resourceId, Item item, int ledgerAmount, int quotaAmount,
-        float marketRate, int cycleDelta, boolean produces) {
+                           float marketRate, int cycleDelta, boolean produces) {
         this.resourceId = (resourceId == null) ? "" : resourceId;
         this.item = item;
         this.ledgerAmount = ledgerAmount;

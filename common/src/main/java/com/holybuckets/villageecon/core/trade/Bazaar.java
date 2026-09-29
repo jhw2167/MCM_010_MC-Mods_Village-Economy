@@ -61,6 +61,8 @@ public class Bazaar {
     @Nullable
     public Market getMarket(Item item) { return markets.get(item); }
 
+    public Collection<Market> getMarkets() { return markets.values(); }
+
     public float getMarketRate(Item item) {
         Market market = markets.get(item);
         return (market != null) ? market.rate() : 0f;
@@ -91,6 +93,11 @@ public class Bazaar {
     }
 
     //Flushes all market postings for this tick
+    public void clearDummyTrades() {
+        for (Market market : markets.values())
+            market.clearDummyTrades();
+    }
+
     public void flushMarkets() {
         for (Market market : markets.values()) {
             market.flushMarket(this);

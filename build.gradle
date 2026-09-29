@@ -137,6 +137,8 @@ subprojects {
         implementation "org.antlr:antlr4-runtime:${antlr_version}"
         implementation "org.xerial:sqlite-jdbc:${sqlite_version}"
 
+        implementation 'org.apache.commons:commons-math3:3.6.1'
+
         //Common (mojmap): implementation "net.blay09.mods:balm-common:${balm_version}"
         //Forge: implementation fg.deobf("net.blay09.mods:balm-forge:${balm_version}")
         //Fabric: modImplementation "net.blay09.mods:balm-fabric:${balm_version}"

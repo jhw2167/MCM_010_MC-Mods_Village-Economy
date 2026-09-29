@@ -3,16 +3,19 @@ package com.holybuckets.villageecon.core.trade;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.model.EconomyResource;
+import com.holybuckets.villageecon.core.VillageManager;
 import com.holybuckets.villageecon.core.model.Mayor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.ChunkPos;
 
 import javax.annotation.Nullable;
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Random;
+import java.util.Set;
 
 import static com.holybuckets.foundation.HBUtil.ChunkUtil.chunkDist;
 
@@ -34,9 +37,13 @@ public class Market {
 
     public static final int SALE_HISTORY_SIZE = 20;
 
+    /** The contractor always moves exactly one unit **/
+    private static final int DUMMY_QUANTITY = 1;
+
     private final Queue<Post> buyPosts = new ArrayDeque<>();
     private final List<Post> sellPosts = new ArrayList<>();
     private final ArrayDeque<Float> recentSalePrices = new ArrayDeque<>();
+    private final Set<Mayor> dummyTradesToday = new HashSet<>();
 
     public Market(Item item) {
         this.item = item;
@@ -71,6 +78,27 @@ public class Market {
         for (Float price : recentSalePrices)
             rounded.add(Math.round(price));
         return rounded;
+    }
+
+    /**
+     * Primes this market at a known rate, filling both the moving average and the visible
+     * sale history so a restored rate holds steady until real trades displace it.
+     */
+    public void seed(float rate, int samples) {
+        if (rate <= 0f) return;
+
+        marketRate.seed(rate);
+        recentSalePrices.clear();
+        for (int i = 0; i < samples; i++) {
+            marketRate.addSample(rate, 1);
+            recentSalePrices.addLast(rate);
+        }
+        while (recentSalePrices.size() > SALE_HISTORY_SIZE)
+            recentSalePrices.removeFirst();
+    }
+
+    public void clearDummyTrades() {
+        dummyTradesToday.clear();
     }
 
     public void recordSale(Sale sale) {
@@ -108,9 +136,15 @@ public class Market {
     {
         //sort
         String item = this.resourceId;
-        if(sellPosts.isEmpty() || buyPosts.isEmpty()) {
-            sellPosts.clear();
-            buyPosts.clear();
+        if(sellPosts.isEmpty() && buyPosts.isEmpty()) {
+            return; //no Market
+        } else if(sellPosts.isEmpty()) {
+            int rand = RANDOM.nextInt(buyPosts.size());
+            sellToDummy( buyPosts.stream().skip(rand).findFirst().orElse(null), bazaar);
+            return;
+        } else if(buyPosts.isEmpty()) {
+            int rand = RANDOM.nextInt(sellPosts.size());
+            buyFromDummy(sellPosts.get(rand), bazaar);
             return;
         }
         List<Post> sortedBuyPosts = new ArrayList<>(buyPosts);
@@ -128,6 +162,7 @@ public class Market {
                 buy.getLedger().logTrade(sale, true);
                 sell.getLedger().logTrade(sale, false);
                 bazaar.recordSale(sale);
+                TransactionLog.recordSale(buy.getVillage().getLevel(), sale);
                 sales++;
             }
 
@@ -139,13 +174,68 @@ public class Market {
         sellPosts.clear();
     }
 
-    private static void logMarketSales(int buyPostsSize, int sellPostsSize, int sales, Market market)
+    /**
+     * Prices good as a weighted midpoint between the market rate
+     * and the villager's reserve price to move the market cheaper or more expensive and encourage more trades
+     */
+    private float dummyPrice(float villageReserve)
     {
-        int sum = market.recentSalePrices.stream().mapToInt(Float::intValue).sum();
-        int avg = (market.recentSalePrices.size() > 0) ? sum / market.recentSalePrices.size() : 0;
-        LoggerProject.logInfo("013003", "Market: " + market.resourceId
-            + ": " + sales + " sales out of " + buyPostsSize + " buy posts and " + sellPostsSize + " sell posts. At average price: " + avg );
+        int weight = marketRate.getWindow();
+        return (marketRate.rate() * weight + villageReserve) / (weight + 1);
     }
+
+    private static long saleTime(Post post)
+    {
+        Mayor village = post.getVillage();
+        if (village == null || village.getLevel() == null) return 0L;
+        return village.getLevel().getGameTime();
+    }
+
+    //Creates dummy seller for a buyer to move market rate to equilibrium
+    private void sellToDummy(Post buy, Bazaar bazaar)
+    {
+        if (buy == null || buy.getVillage() == null) return;
+        if (!dummyTradesToday.add(buy.getVillage())) return;
+
+        float price = dummyPrice(buy.getDemandReserve());
+        Sale sale = new Sale(VillageManager.INDEPENDENT_MAYOR, buy.getVillage(),
+            price, DUMMY_QUANTITY, saleTime(buy), item, resourceId);
+
+        buy.getLedger().logTrade(sale, true);
+        bazaar.recordSale(sale);
+        TransactionLog.recordSale(buy.getVillage().getLevel(), sale);
+
+        buyPosts.remove(buy);
+        LoggerProject.logDebug("013004", "Market: " + resourceId
+            + ": contractor sold 1 to " + buy.getVillage().getName() + " at " + price);
+    }
+
+    //Creates dummy buyer for a seller to move market rate
+    private void buyFromDummy(Post sell, Bazaar bazaar)
+    {
+        if (sell == null || sell.getVillage() == null) return;
+        if (!dummyTradesToday.add(sell.getVillage())) return;
+
+        float price = dummyPrice(sell.getDemandReserve());
+        Sale sale = new Sale(sell.getVillage(), VillageManager.INDEPENDENT_MAYOR,
+            price, DUMMY_QUANTITY, saleTime(sell), item, resourceId);
+
+        sell.getLedger().logTrade(sale, false);
+        bazaar.recordSale(sale);
+        TransactionLog.recordSale(sell.getVillage().getLevel(), sale);
+
+        sellPosts.remove(sell);
+        LoggerProject.logDebug("013005", "Market: " + resourceId
+            + ": contractor bought 1 from " + sell.getVillage().getName() + " at " + price);
+    }
+
+    private static void logMarketSales(int buyPostsSize, int sellPostsSize, int sales, Market market)
+        {
+            int sum = market.recentSalePrices.stream().mapToInt(Float::intValue).sum();
+            int avg = (market.recentSalePrices.size() > 0) ? sum / market.recentSalePrices.size() : 0;
+            LoggerProject.logInfo("013003", "Market: " + market.resourceId
+                + ": " + sales + " sales out of " + buyPostsSize + " buy posts and " + sellPostsSize + " sell posts. At average price: " + avg );
+        }
 
     //Find the closest seller by distance to the buyer's village
     @Nullable

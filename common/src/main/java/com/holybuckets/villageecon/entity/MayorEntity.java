@@ -24,6 +24,12 @@ public class MayorEntity extends Villager {
     private static final String NBT_MAYOR = "mayor";
     private static final String NBT_VILLAGE_CHUNK_ID = "villageChunkId";
 
+    private static final java.util.Set<RemovalReason> UNLOADS = java.util.Set.of(
+        RemovalReason.UNLOADED_TO_CHUNK,
+        RemovalReason.UNLOADED_WITH_PLAYER,
+        RemovalReason.CHANGED_DIMENSION
+    );
+
     private String villageChunkId;
     private CompoundTag pendingMayorData;
 
@@ -68,6 +74,13 @@ public class MayorEntity extends Villager {
 
     @Override
     public void remove(RemovalReason reason) {
+        //An unloading entity is about to be written to chunk storage, so hand it the
+        //current static ledger first. Deaths go through mayorEntityRemoved instead.
+        if (!this.level().isClientSide() && UNLOADS.contains(reason) && villageChunkId != null) {
+            Mayor mayor = Mayor.getMayor(this.level(), villageChunkId);
+            if (mayor != null) mayor.syncStaticLedgerToEntity(this);
+        }
+
         VillageManager.mayorEntityRemoved(this.level(), villageChunkId, reason, this);
         super.remove(reason);
     }
@@ -121,12 +134,10 @@ public class MayorEntity extends Villager {
         super.addAdditionalSaveData(tag);
         if (villageChunkId != null) tag.putString(NBT_VILLAGE_CHUNK_ID, villageChunkId);
 
-        CompoundTag mayorData = pendingMayorData;
-        if (!this.level().isClientSide() && villageChunkId != null) {
-            Mayor mayor = Mayor.getMayor(this.level(), villageChunkId);
-            if (mayor != null) mayorData = mayor.serializeNBT();
-        }
-        if (mayorData != null) tag.put(NBT_MAYOR, mayorData);
+        //Write only the once daily snapshot. Serialising the mayor's live ledgers here
+        //would bake in transactions that the journal is still holding, and replaying the
+        //journal on the next world load would then count them twice.
+        if (pendingMayorData != null) tag.put(NBT_MAYOR, pendingMayorData);
     }
 
     @Override

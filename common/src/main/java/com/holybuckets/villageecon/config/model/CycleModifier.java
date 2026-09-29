@@ -60,7 +60,6 @@ public class CycleModifier {
 
     public Map<String, Float> getResourceProductionModifiers() { return resourceProductionModifiers; }
 
-
     //** Setters **//
 
     public void setWeight(Integer weight) {
@@ -89,7 +88,6 @@ public class CycleModifier {
         target.put(resourceId, value);
     }
 
-
     //** Serialization **//
 
     public JsonObject serialize()
@@ -108,7 +106,8 @@ public class CycleModifier {
     public static CycleModifier deserialize(JsonObject obj)
     {
         String id = obj.has("id") ? obj.get("id").getAsString() : "";
-        CycleModifier modifier = new CycleModifier(id);
+        CycleModifier modifier = new
+        CycleModifier(id);
 
         if (id.isEmpty()) {
             LoggerProject.logError(CLASS_ID + "001", "Cycle modifier entry is missing 'id' property, entry will be pruned");

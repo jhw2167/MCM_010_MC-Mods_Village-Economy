@@ -7,6 +7,7 @@ import com.holybuckets.villageecon.config.model.CycleModifier;
 import com.holybuckets.villageecon.config.model.EconomyResource;
 import com.holybuckets.villageecon.config.model.EconomyResource.ResourceType;
 import com.holybuckets.villageecon.config.model.VillagePersonality;
+import com.holybuckets.villageecon.item.ModItems;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
@@ -134,8 +135,7 @@ public class ModConfig {
 
     /** Sprite plotted for each historical sale on the trade screen price graph **/
     public Item getGraphMarkerItem() {
-        Item item = HBUtil.ItemUtil.itemNameToItem(getBalmConfig().tradeConfigs.graphMarkerItem);
-        return (item != null) ? item : Items.ENDER_PEARL;
+        return ModItems.dot.get();
     }
 
     public int getMayorTradeSlotCapacity() {
@@ -182,6 +182,7 @@ public class ModConfig {
             );
         }
 
+        EconomyResource.setCurrency(getCurrencyItem());
         hydrateResources();
         validateModifierReferences();
         validateLuxuryPool();

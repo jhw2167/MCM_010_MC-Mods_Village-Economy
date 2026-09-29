@@ -28,7 +28,6 @@ dependencies {
     }
 
     modImplementation("com.simibubi.create:create-fabric:${create_fabric_version}")
-
 }
 
 loom {

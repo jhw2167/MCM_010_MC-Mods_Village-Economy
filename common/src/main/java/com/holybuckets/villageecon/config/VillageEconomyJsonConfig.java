@@ -37,6 +37,7 @@ public class VillageEconomyJsonConfig implements IStringSerializable {
     //** Getters **//
     public Collection<EconomyResource> getResources(ResourceType type) {
         return switch (type) {
+            case CURRENCY ->  Collections.EMPTY_LIST;
             case STAPLE -> Collections.unmodifiableCollection(staples.values());
             case BASIC -> Collections.unmodifiableCollection(basics.values());
             case LUXURY -> Collections.unmodifiableCollection(luxuries.values());

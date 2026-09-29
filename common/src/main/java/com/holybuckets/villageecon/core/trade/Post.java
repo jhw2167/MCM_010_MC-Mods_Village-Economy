@@ -1,5 +1,6 @@
 package com.holybuckets.villageecon.core.trade;
 
+import com.holybuckets.villageecon.core.VillageManager;
 import com.holybuckets.villageecon.core.model.Mayor;
 import com.holybuckets.villageecon.core.model.ResourceLedger;
 
@@ -20,6 +21,7 @@ public class Post {
         this.demandReserve = demandReserve;
         this.ledger = ledger;
     }
+
 
     public Mayor getVillage() { return village; }
 

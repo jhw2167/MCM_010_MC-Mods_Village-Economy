@@ -36,7 +36,7 @@ public class VillageEconConfig {
     public static final int DEF_WEIGHT = 10;
     public static final float DEF_AGREEABLENESS = 0.5f;
     public static final String DEF_CURRENCY_ITEM = "minecraft:emerald";
-    public static final String DEF_GRAPH_MARKER_ITEM = "minecraft:ender_pearl";
+    public static final String DEF_GRAPH_MARKER_ITEM = "hbs_village_econ:dot";
 
 
     //** CONFIG FIELDS **//
@@ -105,9 +105,6 @@ public class VillageEconConfig {
 
         @Comment("Item used as currency when a player trades resources with a village Mayor")
         public String currencyItem = DEF_CURRENCY_ITEM;
-
-        @Comment("Item sprite plotted for each past sale on the Mayor trade screen price graph")
-        public String graphMarkerItem = DEF_GRAPH_MARKER_ITEM;
 
         @Comment("Maximum stack size accepted by the Mayor trade screen submission slot")
         public int mayorTradeSlotCapacity = 999;

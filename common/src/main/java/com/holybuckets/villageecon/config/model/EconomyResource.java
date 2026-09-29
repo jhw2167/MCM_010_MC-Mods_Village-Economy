@@ -4,7 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.villageecon.LoggerProject;
+import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.VillageEconConfig;
+import com.holybuckets.villageecon.config.VillageEconomyJsonConfig;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
@@ -20,8 +22,7 @@ public class EconomyResource {
 
     public static final String CLASS_ID = "007";
 
-
-    public enum ResourceType { STAPLE, BASIC, LUXURY }
+    public enum ResourceType { CURRENCY, STAPLE, BASIC, LUXURY }
 
     private final ResourceType type;
     private final String itemIdRaw;
@@ -39,6 +40,10 @@ public class EconomyResource {
 
 
     //** Constructors **//
+    public static EconomyResource CURRENCY;
+    public static void setCurrency(Item currencyItem) {
+        CURRENCY = new EconomyResource(ResourceType.CURRENCY, HBUtil.ItemUtil.itemToString(currencyItem));
+    }
 
     public EconomyResource(ResourceType type, String itemIdRaw) {
         this.type = (type == null) ? ResourceType.STAPLE : type;
@@ -118,8 +123,7 @@ public class EconomyResource {
     }
 
 
-    //** Setters / mutation used during deserialization **//
-
+    // Setters
     public void setUseTagsRaw(String useTagsRaw) { this.useTagsRaw = useTagsRaw; }
 
     public void setStartProduction(Integer startProduction) {
@@ -173,8 +177,7 @@ public class EconomyResource {
     }
 
 
-    //** Hydration and validation **//
-
+    //** Hydration **//
     public void hydrate() {
         this.item = HBUtil.ItemUtil.itemNameToItem(itemIdRaw);
         if (useTagsRaw != null && !useTagsRaw.isBlank())
@@ -192,23 +195,28 @@ public class EconomyResource {
         }
     }
 
-    /** True if the hydrated item resolved to a real registry entry **/
     public boolean isValid() {
         return item != null && !item.equals(Items.AIR);
     }
 
-    /** True if the given stack is a valid item of exchange for this resource **/
     public boolean matches(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
         if (tag != null && stack.is(tag)) return true;
         return item != null && stack.is(item);
     }
 
-    /** True if this resource may be assigned to a village in the given biome **/
     public boolean allowsBiome(ResourceLocation biome) {
         if (biome == null) return true;
         if (biomeBlackList.contains(biome)) return false;
         return biomeWhiteList.isEmpty() || biomeWhiteList.contains(biome);
+    }
+
+    //** STATICS **//
+
+    public static EconomyResource getById(String resourceId) {
+        if(resourceId == null || resourceId.isBlank()) return null;
+        ModConfig config = ModConfig.getInstance();
+        return config.getResource(resourceId);
     }
 
 
