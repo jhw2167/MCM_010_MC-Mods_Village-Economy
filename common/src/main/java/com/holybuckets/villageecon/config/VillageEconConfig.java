@@ -30,7 +30,7 @@ public class VillageEconConfig {
     public static final int DEF_START_PRODUCTION = 16;
     public static final int DEF_START_PRODUCTION_AT_LEVEL = 1;
     public static final float DEF_PRODUCTION_MULTIPLIER = 1f;
-    public static final float DEF_CONSUMPTION_FRACTION = 0.5f;
+    public static final float DEF_CONSUMPTION_FRACTION = 1f;
     public static final float DEF_INTEREST_MODIFIER = 1f;
     public static final float DEF_RESOURCE_MODIFIER = 1f;
     public static final int DEF_WEIGHT = 10;

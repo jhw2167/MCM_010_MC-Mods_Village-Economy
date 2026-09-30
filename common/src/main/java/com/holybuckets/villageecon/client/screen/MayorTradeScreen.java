@@ -14,9 +14,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 //Code mostly duplicated from VillagerScreen with a toggle feature
@@ -50,19 +50,19 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
     private static final int OFFER_ARROW_Y = 6;
 
     private static final int BANNER_Y = 6;
-    private static final int BANNER_MARGIN = 8;
-    private static final int BANNER_ICON_SIZE = 16;
+    private static final int BANNER_MARGIN = 10;
+    private static final int BANNER_ICON_SZ = 16;
 
     private static final int BANNER_ICON_OFFSET = 4;
 
-    private static final int GRAPH_SALE_WINDOW = 16;
+    private static final int GRAPH_WINDOW = 12;
     private static final int GRAPH_PADDING = 3;
 
     //Scales down items sprites to use as graph dots
     private static final float MARKER_SCALE = 0.5f;
     private static final int MARKER_SIZE = (int) (16 * MARKER_SCALE);
 
-    private static final int LEDGER_Y = 98;
+    private static final int LEDGER_Y = 90;
     private static final int LEDGER_COLUMNS = 3;
     private static final int LEDGER_ROW_HEIGHT = 18;
     private static final int LEDGER_ROWS = 3;
@@ -72,7 +72,9 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
     private static final int COLOR_LOSS = 0xB03030; //red
     private static final int COLOR_NEUTRAL = 0x808080; //grey
 
-    private static final int COLOR_TEXT = 0x404040; //grey
+    private static final int COLOR_PLOT_LINE = 0xFF505050;  //grey
+    private static final int COLOR_NEGATIVE = 0xB03030;
+    private static final int COLOR_TEXT = 0x404040; //black
 
     private static final String STACK_COUNT_PREFIX = "\u00A76";
     private static final int COLOR_ROW_SELECTED = 0xFFFFFFA0;
@@ -81,6 +83,9 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
     private final TradeOfferButton[] tradeOfferButtons = new TradeOfferButton[MayorTradeMenu.VISIBLE_ROWS];
     private Button toggleButton;
     private int scrollOffset = 0;
+
+    private final List<int[]> markerHits = new ArrayList<>();
+    private int reserveHitX, reserveHitY, reserveHitW;
 
     public MayorTradeScreen(MayorTradeMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -181,7 +186,7 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
     {
         int originX = this.leftPos + MayorTradeMenu.GRAPH_X;
         int originY = this.topPos + LEDGER_Y;
-        int columnWidth = MayorTradeMenu.GRAPH_WIDTH / LEDGER_COLUMNS;
+        int columnWidth = (MayorTradeMenu.GRAPH_WIDTH / LEDGER_COLUMNS)+6;
 
         int slot = 0;
         //Indivual ledger +/- next to item icon. 3x3 == 9 maxium listed under the graph
@@ -212,7 +217,7 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
 
         int color = (delta > 0) ? COLOR_GAIN : (delta < 0) ? COLOR_LOSS : COLOR_NEUTRAL;
         String label = (delta > 0 ? "+" : "") + delta;
-        gui.drawString(this.font, label, x + 18, y + 4, color, false);
+        gui.drawString(this.font, label, x + 18, y + 6, color, false);
 
         return slot + 1;
     }
@@ -254,6 +259,8 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
 
     private void renderGraph(GuiGraphics gui)
     {
+        markerHits.clear();
+
         MayorTradeOffer offer = this.menu.getSelected();
         if (offer == null) return;
 
@@ -265,11 +272,12 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
 
         float rate = MarketSalesCache.getRate(offer.getResourceId(), offer.getMarketRate());
         List<Integer> all = MarketSalesCache.getSales(offer.getResourceId());
+        List<Integer> allQty = MarketSalesCache.getQuantities(offer.getResourceId());
         if (all.isEmpty()) return;
 
-        List<Integer> sales = all.subList(Math.max(0, all.size() - GRAPH_SALE_WINDOW), all.size());
+        int from = Math.max(0, all.size() - GRAPH_WINDOW);
+        List<Integer> sales = all.subList(from, all.size());
 
-        //Symmetric about D so the centre line stays the market rate
         float halfRange = 1f;
         for (Integer price : sales)
             halfRange = Math.max(halfRange, Math.abs(price - rate));
@@ -279,23 +287,78 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
         int stepDenominator = Math.max(1, count - 1);
         int span = w - 2 * GRAPH_PADDING - MARKER_SIZE;
 
+        int[] px = new int[count];
+        int[] py = new int[count];
+        for (int i = 0; i < count; i++) {
+            px[i] = x + GRAPH_PADDING + (count == 1 ? span / 2 : span * i / stepDenominator);
+            py[i] = midY - Math.round(((sales.get(i) - rate) / halfRange) * half) - MARKER_SIZE / 2;
+        }
+
+        for (int i = 1; i < count; i++) {
+            drawLine(gui, px[i - 1] + MARKER_SIZE / 2, py[i - 1] + MARKER_SIZE / 2,
+                px[i] + MARKER_SIZE / 2, py[i] + MARKER_SIZE / 2, COLOR_PLOT_LINE);
+        }
+
         ItemStack marker = offer.getItem().getDefaultInstance();
 
         for (int i = 0; i < count; i++)
         {
-            int price = sales.get(i);
-            int px = x + GRAPH_PADDING + (count == 1 ? span / 2 : span * i / stepDenominator);
-            int py = midY - Math.round(((price - rate) / halfRange) * half) - MARKER_SIZE / 2;
-
             gui.pose().pushPose();
-            gui.pose().translate(px, py, 200.0F);
+            gui.pose().translate(px[i], py[i], 200.0F);
             gui.pose().scale(MARKER_SCALE, MARKER_SCALE, 1.0F);
             gui.renderFakeItem(marker, 0, 0);
             gui.pose().popPose();
+
+            int index = from + i;
+            int quantity = (index < allQty.size()) ? allQty.get(index) : 1;
+            markerHits.add(new int[]{ px[i], py[i], sales.get(i), quantity });
         }
 
         String rateLabel = String.valueOf(Math.round(rate));
         gui.drawString(this.font, rateLabel, x + w - 4 - this.font.width(rateLabel), midY - 10, COLOR_TEXT, false);
+    }
+
+    /** Line between two points, used for connecting graph points **/
+    private void drawLine(GuiGraphics gui, int x1, int y1, int x2, int y2, int color)
+    {
+        int dx = Math.abs(x2 - x1);
+        int dy = -Math.abs(y2 - y1);
+        int sx = (x1 < x2) ? 1 : -1;
+        int sy = (y1 < y2) ? 1 : -1;
+        int err = dx + dy;
+
+        while (true) {
+            gui.fill(x1, y1, x1 + 1, y1 + 1, color);
+            if (x1 == x2 && y1 == y2) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x1 += sx; }
+            if (e2 <= dx) { err += dx; y1 += sy; }
+        }
+    }
+
+    private void renderGraphTooltips(GuiGraphics gui, int mouseX, int mouseY)
+    {
+        for (int[] hit : markerHits) {
+            if (mouseX < hit[0] || mouseX > hit[0] + MARKER_SIZE) continue;
+            if (mouseY < hit[1] || mouseY > hit[1] + MARKER_SIZE) continue;
+
+            gui.renderComponentTooltip(this.font, List.of(
+                Component.translatable("screen.hbs_village_econ.sale_price", hit[2]),
+                Component.translatable("screen.hbs_village_econ.sale_quantity", hit[3])
+            ), mouseX, mouseY);
+            return;
+        }
+    }
+
+    private void renderReserveTooltip(GuiGraphics gui, int mouseX, int mouseY)
+    {
+        if (mouseX < reserveHitX || mouseX > reserveHitX + reserveHitW) return;
+        if (mouseY < reserveHitY || mouseY > reserveHitY + 10) return;
+
+        gui.renderComponentTooltip(this.font, List.of(
+            Component.translatable("screen.hbs_village_econ.stored", Math.round(this.menu.getReserveCurrency())),
+            Component.translatable("screen.hbs_village_econ.projected", Math.round(this.menu.getProjectedCurrency()))
+        ), mouseX, mouseY);
     }
 
 
@@ -308,6 +371,12 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
             sendButton(MayorTradeMenu.BUTTON_CLAIM_OUTPUT);
             return true;
         }
+
+        if (!this.menu.isGraphView() && hasShiftDown()
+            && this.isHovering(MayorTradeMenu.INPUT_B_X, MayorTradeMenu.INPUT_B_Y, 16, 16, mouseX, mouseY)) {
+            sendButton(MayorTradeMenu.BUTTON_CANCEL_TRADE);
+            return true;
+        }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
@@ -316,14 +385,19 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
         gui.drawString(this.font, this.title, MayorTradeMenu.TRADE_LIST_X + 12, BANNER_Y, COLOR_TEXT, false);
 
         Component reserve = Component.translatable("screen.hbs_village_econ.village_reserve",
-            Math.round(this.menu.getReserveCurrency()));
+            Math.round(this.menu.getProjectedCurrency()));
 
         //Currency icon sits flush against the right edge, the amount immediately left of it
         ItemStack currency = new ItemStack(ModConfig.getInstance().getCurrencyItem());
-        int iconX = this.imageWidth - BANNER_MARGIN - BANNER_ICON_SIZE;
+        int iconX = this.imageWidth - BANNER_MARGIN - BANNER_ICON_SZ;
         int textX = iconX - 2 - this.font.width(reserve);
 
-        gui.drawString(this.font, reserve, textX, BANNER_Y, COLOR_TEXT, false);
+        int reserveColor = (this.menu.getProjectedCurrency() < 0f) ? COLOR_NEGATIVE : COLOR_TEXT;
+        gui.drawString(this.font, reserve, textX, BANNER_Y, reserveColor, false);
+
+        reserveHitX = this.leftPos + textX;
+        reserveHitY = this.topPos + BANNER_Y;
+        reserveHitW = (iconX + BANNER_ICON_SZ) - textX;
 
         gui.pose().pushPose();
         gui.pose().translate(0.0F, 0.0F, 100.0F);
@@ -370,6 +444,9 @@ public class MayorTradeScreen extends AbstractContainerScreen<MayorTradeMenu> {
 
         RenderSystem.enableDepthTest();
         this.renderTooltip(gui, mouseX, mouseY);
+
+        if (this.menu.isGraphView()) renderGraphTooltips(gui, mouseX, mouseY);
+        renderReserveTooltip(gui, mouseX, mouseY);
     }
 
     @Override

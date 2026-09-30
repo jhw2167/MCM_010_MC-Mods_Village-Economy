@@ -18,15 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Journal of every ledger affecting transaction since the last daily process.
- *
- * Mayors live in RAM and write their ledgers into their entity's compound tag, but an
- * entity that is unloaded (or a server that stops mid day) leaves that tag stale. This
- * log is written to the DataStore alongside it, so on world load the theoretical ledgers
- * can be replayed forward from whatever the entities happened to persist.
- *
- * The log is cleared at the end of each daily process, once every living mayor has
- * pushed its fresh ledger state back onto its entity.
+ * Stores all transactions for sending to client and replaying after server shutsdown
+ * Daily transactions are serialized to the respective mayor entity.
  */
 public class TransactionLog {
 
@@ -45,7 +38,7 @@ public class TransactionLog {
     public static TransactionLog init(ServerLevel level) {
         TransactionLog log = new TransactionLog(level);
         LOGS.put(level, log);
-        LoggerProject.logInit(CLASS_ID + "000", TransactionLog.class.getName());
+        LoggerProject.logInit("029000", TransactionLog.class.getName());
         return log;
     }
 
@@ -93,15 +86,7 @@ public class TransactionLog {
 
     //** DAILY ROLLOVER **//
 
-    /**
-     * Called once the day's ledger state has been pushed back onto the mayor entities.
-     * Everything up to this point is now captured in entity NBT, so the journal restarts.
-     */
-    public void rollOver() {
-        if (!pending.isEmpty()) {
-            LoggerProject.logInfo(CLASS_ID + "001",
-                "Discarding " + pending.size() + " journalled transaction(s) now captured in mayor entity data");
-        }
+    public void clearPendingOnDailyCycle() {
         pending.clear();
     }
 
@@ -109,10 +94,8 @@ public class TransactionLog {
     //** REPLAY **//
 
     /**
-     * Applies every journalled transaction to the matching mayor's theoretical ledger.
-     * Run only after the mayor entities have loaded and their ledgers been rehydrated,
-     * otherwise the transactions would be applied to ledgers that are about to be
-     * overwritten by the entity's own compound tag.
+     * Applies serialzied journalled transactions from the previous day to the
+     * respective mayors so they don't lose progress prior to server shutdown
      */
     public int replay(VillageManager manager) {
         if (manager == null || pending.isEmpty()) return 0;
@@ -122,8 +105,6 @@ public class TransactionLog {
         int contractor = 0;
 
         for (Transaction transaction : pending) {
-            //The independent contractor is journalled for the record but has no ledger to
-            //restore, so its side of a sale is skipped rather than counted as orphaned
             if (Mayor.DUMMY_ID.equals(transaction.getVillageChunkId())) { contractor++; continue; }
 
             Mayor mayor = manager.getMayor(transaction.getVillageChunkId());
@@ -132,10 +113,7 @@ public class TransactionLog {
             applied++;
         }
 
-        LoggerProject.logInfo(CLASS_ID + "002", "Replayed " + applied
-            + " transaction(s) onto theoretical ledgers"
-            + (contractor > 0 ? "; skipped " + contractor + " contractor side(s)" : "")
-            + (orphaned > 0 ? "; " + orphaned + " had no resident mayor and were dropped" : ""));
+        LoggerProject.logInfo( "029002", "Replayed " + applied + " transactions");
 
         pending.clear();
         return applied;
@@ -169,12 +147,10 @@ public class TransactionLog {
                 Transaction transaction = Transaction.deserialize(entry.getAsJsonObject());
                 if (transaction != null && transaction.isValid()) pending.add(transaction);
             } catch (Exception e) {
-                LoggerProject.logWarning(CLASS_ID + "003",
-                    "Could not parse journalled transaction " + entry + ". " + e.getMessage());
+                LoggerProject.logWarning("029003", "Could not parse transaction " + entry + ". " + e.getMessage());
             }
         }
 
-        LoggerProject.logInfo(CLASS_ID + "004",
-            "Loaded " + pending.size() + " journalled transaction(s) awaiting replay");
+        LoggerProject.logInfo("029004", "Loaded " + pending.size() + "transactions");
     }
 }

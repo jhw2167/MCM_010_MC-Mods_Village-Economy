@@ -12,12 +12,14 @@ public class MayorOffersSync {
 
     private final List<MayorTradeOffer> offers;
     private final float reserveCurrency;
+    private final float projectedCurrency;
     private final String villageName;
     private final float currencyDelta;
 
-    public MayorOffersSync(List<MayorTradeOffer> offers, float reserveCurrency, String villageName, float currencyDelta) {
+    public MayorOffersSync(List<MayorTradeOffer> offers, float reserveCurrency, float projectedCurrency, String villageName, float currencyDelta) {
         this.offers = (offers == null) ? new ArrayList<>() : new ArrayList<>(offers);
         this.reserveCurrency = reserveCurrency;
+        this.projectedCurrency = projectedCurrency;
         this.villageName = (villageName == null) ? "" : villageName;
         this.currencyDelta = currencyDelta;
     }
@@ -25,6 +27,8 @@ public class MayorOffersSync {
     public List<MayorTradeOffer> getOffers() { return Collections.unmodifiableList(offers); }
 
     public float getReserveCurrency() { return reserveCurrency; }
+
+    public float getProjectedCurrency() { return projectedCurrency; }
 
     public String getVillageName() { return villageName; }
 

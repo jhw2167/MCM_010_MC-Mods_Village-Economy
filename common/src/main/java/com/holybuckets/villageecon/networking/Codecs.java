@@ -19,6 +19,11 @@ public class Codecs {
         buf.writeVarInt(prices.size());
         for (Integer price : prices)
             buf.writeVarInt(price);
+
+        List<Integer> quantities = object.getSaleQuantities();
+        buf.writeVarInt(quantities.size());
+        for (Integer quantity : quantities)
+            buf.writeVarInt(quantity);
         return buf;
     }
 
@@ -29,13 +34,19 @@ public class Codecs {
         List<Integer> prices = new java.util.ArrayList<>(size);
         for (int i = 0; i < size; i++)
             prices.add(buf.readVarInt());
-        return new LedgerSalesSync(resourceId, marketRate, prices);
+
+        int qSize = buf.readVarInt();
+        List<Integer> quantities = new java.util.ArrayList<>(qSize);
+        for (int i = 0; i < qSize; i++)
+            quantities.add(buf.readVarInt());
+        return new LedgerSalesSync(resourceId, marketRate, prices, quantities);
     }
 
 
     public static final FriendlyByteBuf encodeMayorOffersSync(MayorOffersSync object, FriendlyByteBuf buf) {
         com.holybuckets.villageecon.menu.MayorTradeMenu.writeOffers(buf, object.getOffers());
         buf.writeFloat(object.getReserveCurrency());
+        buf.writeFloat(object.getProjectedCurrency());
         buf.writeUtf(object.getVillageName());
         buf.writeFloat(object.getCurrencyDelta());
         return buf;
@@ -47,9 +58,10 @@ public class Codecs {
         for (int i = 0; i < count; i++)
             offers.add(com.holybuckets.villageecon.menu.MayorTradeOffer.read(buf));
         float reserveCurrency = buf.readFloat();
+        float projectedCurrency = buf.readFloat();
         String villageName = buf.readUtf();
         float currencyDelta = buf.readFloat();
-        return new MayorOffersSync(offers, reserveCurrency, villageName, currencyDelta);
+        return new MayorOffersSync(offers, reserveCurrency, projectedCurrency, villageName, currencyDelta);
     }
 
 }

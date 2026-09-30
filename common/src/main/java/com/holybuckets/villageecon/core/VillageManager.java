@@ -239,7 +239,7 @@ public class VillageManager {
         Mayor mayor = new Mayor(level, tag);
         mayor.setVillageChunkId(villageChunkId);
         mayor.attachEntity(entity);
-        mayor.syncLedgersToEntity(entity);
+        mayor.syncLedgers(entity);
         mayors.put(pos, mayor);
     }
 
@@ -346,7 +346,7 @@ public class VillageManager {
             if (market == null) continue;
 
             LedgerSalesSync message = new LedgerSalesSync(
-                offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded());
+                offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded(), market.getRecentSaleQuantities());
             HBUtil.NetworkUtil.serverSendToPlayer(player, message);
         }
     }
@@ -366,14 +366,10 @@ public class VillageManager {
         replayAttempts++;
 
         if (!allResolved && replayAttempts < REPLAY_GRACE_ATTEMPTS) return;
-
-        if (!allResolved) {
-            LoggerProject.logWarning("012006", "Replaying transactions with "
-                + (persistedMayorChunkpos.size() - mayors.size()) + " village(s) still unresolved");
-        }
-
+        
         log.replay(this);
         transactionsReplayed = true;
+        EconomyMath.snapshotGrowthPool();
     }
 
 
@@ -381,7 +377,7 @@ public class VillageManager {
     {
         for (Mayor mayor : mayors.values()) {
             MayorEntity entity = mayor.getEntity();
-            if (entity != null) mayor.syncLedgersToEntity(entity);
+            if (entity != null) mayor.syncLedgers(entity);
         }
     }
 
@@ -407,7 +403,7 @@ public class VillageManager {
         //Snapshot last: the entities now hold everything the journal was covering
         snapshotLedgersToEntities();
         TransactionLog log = TransactionLog.get(level);
-        if (log != null) log.rollOver();
+        if (log != null) log.clearPendingOnDailyCycle();
     }
 
     public void cycleProcess()
@@ -563,11 +559,7 @@ public class VillageManager {
                 "Loaded " + persistedMarketRates.size() + " persisted market rate(s)");
         }
 
-        /**
-         * Re-applies the saved rates to a freshly built Bazaar. Each is seeded repeatedly so
-         * it saturates the moving average and the visible sale history, otherwise the first
-         * trade after a restart would drag the rate straight back toward the r/q default.
-         */
+
         public void restoreMarketRates(Bazaar bazaar)
         {
             if (bazaar == null || persistedMarketRates.isEmpty()) return;
@@ -604,7 +596,7 @@ public class VillageManager {
         if(manager.mayorEntities.containsKey(mayorEntity)) {
             manager.mayorEntities.put(mayorEntity, mayorEntity.blockPosition());
             Mayor mayor = manager.getMayor(villageChunkId);
-            if (mayor != null) mayor.syncLedgersToEntity(mayorEntity);
+            if (mayor != null) mayor.syncLedgers(mayorEntity);
             return;
         }
 
@@ -658,6 +650,7 @@ public class VillageManager {
     private static void onServerStart(ServerStartingEvent event) {
         MANAGERS.clear();
         TransactionLog.clearAll();
+        EconomyMath.clearGrowthPool();
         GENERAL_CONFIG = GeneralConfig.getInstance();
         MOD_CONFIG = ModConfig.getInstance();
         VillageEconomyChunk.MOD_CONFIG = ModConfig.getInstance();
@@ -674,6 +667,7 @@ public class VillageManager {
         }
         MANAGERS.clear();
         TransactionLog.clearAll();
+        EconomyMath.clearGrowthPool();
     }
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
@@ -688,6 +682,7 @@ public class VillageManager {
         Bazaar bazaar = new Bazaar((ServerLevel) event.getLevel());
         manager.restoreMarketRates(bazaar);
         MarketState.init(manager, bazaar);
+        EconomyMath.snapshotGrowthPool();
         if(INDEPENDENT_MAYOR == null)
             INDEPENDENT_MAYOR = Mayor.dummyMayor(GeneralConfig.OVERWORLD);
     }

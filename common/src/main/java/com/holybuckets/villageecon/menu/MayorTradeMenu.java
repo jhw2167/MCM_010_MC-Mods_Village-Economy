@@ -74,6 +74,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
 
     public static final int BUTTON_TOGGLE_VIEW = 100;
     public static final int BUTTON_CLAIM_OUTPUT = 101;
+    public static final int BUTTON_CANCEL_TRADE = 102;
 
     public static final int MAX_OUTPUT_AMOUNT = 32767;
     public static final int MAX_SYNC_COUNT = 127;
@@ -94,6 +95,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     private final DataSlot outputAmount = DataSlot.standalone();
 
     private float reserveCurrency = 0f;
+    private float projectedCurrency = 0f;
     private String villageName = "";
     private float currencyDelta = 0f;
     private int selectedOffer = 0;
@@ -101,13 +103,14 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     private boolean updatingOutput = false;
 
     public MayorTradeMenu(int syncId, Inventory playerInventory, @Nullable Mayor mayor,
-        List<MayorTradeOffer> offers, float reserveCurrency, String villageName, float currencyDelta)
+        List<MayorTradeOffer> offers, float reserveCurrency, float projectedCurrency, String villageName, float currencyDelta)
     {
         super(ModMenus.mayorTradeMenu.get(), syncId);
         this.player = playerInventory.player;
         this.mayor = mayor;
         if (offers != null) this.offers.addAll(offers);
         this.reserveCurrency = reserveCurrency;
+        this.projectedCurrency = projectedCurrency;
         this.villageName = (villageName == null) ? "" : villageName;
         this.currencyDelta = currencyDelta;
         if (mayor != null) mayor.beginInteraction();
@@ -150,9 +153,10 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         for (int i = 0; i < count; i++)
             offers.add(MayorTradeOffer.read(buf));
         float reserveCurrency = buf.readFloat();
+        float projectedCurrency = buf.readFloat();
         String villageName = buf.readUtf();
         float currencyDelta = buf.readFloat();
-        return new MayorTradeMenu(syncId, playerInventory, null, offers, reserveCurrency, villageName, currencyDelta);
+        return new MayorTradeMenu(syncId, playerInventory, null, offers, reserveCurrency, projectedCurrency, villageName, currencyDelta);
     }
 
     public static void writeOffers(FriendlyByteBuf buf, List<MayorTradeOffer> offers) {
@@ -173,7 +177,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
             int delta = mayor.getTradeDiff(id);
             boolean produces = resource.productionAt(level) > 0;
             offers.add(new MayorTradeOffer(id, resource.getItem(),
-                mayor.getAvailable(id), mayor.getQuota(id), MarketState.marketRate(id), delta, produces));
+                mayor.getAvailable(id), mayor.getQuota(id), mayor.playerPrice(id), delta, produces));
         }
         return offers;
     }
@@ -185,6 +189,8 @@ public class MayorTradeMenu extends AbstractContainerMenu {
 
 
     public float getReserveCurrency() { return reserveCurrency; }
+
+    public float getProjectedCurrency() { return projectedCurrency; }
 
 
     public String getVillageName() { return villageName; }
@@ -208,8 +214,9 @@ public class MayorTradeMenu extends AbstractContainerMenu {
     }
 
     //resets offers after trade completion
-    public void setOffers(List<MayorTradeOffer> updated, float reserveCurrency, String villageName, float currencyDelta) {
+    public void setOffers(List<MayorTradeOffer> updated, float reserveCurrency, float projectedCurrency, String villageName, float currencyDelta) {
         this.reserveCurrency = reserveCurrency;
+        this.projectedCurrency = projectedCurrency;
         this.villageName = (villageName == null) ? "" : villageName;
         this.currencyDelta = currencyDelta;
         if (updated == null) return;
@@ -226,8 +233,9 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         float reserve = mayor.getStaticLedger().getCurrency();
         String name = mayor.getName();
         float delta = mayor.currencyDiff();
-        setOffers(updated, reserve, name, delta);
-        HBUtil.NetworkUtil.serverSendToPlayer(serverPlayer, new MayorOffersSync(updated, reserve, name, delta));
+        float projected = mayor.getTheoLedger().getCurrency();
+        setOffers(updated, reserve, projected, name, delta);
+        HBUtil.NetworkUtil.serverSendToPlayer(serverPlayer, new MayorOffersSync(updated, reserve, projected, name, delta));
     }
 
     private void syncSelectedSales() {
@@ -243,7 +251,7 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         if (market == null) return;
 
         HBUtil.NetworkUtil.serverSendToPlayer(serverPlayer, new LedgerSalesSync(
-            offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded()));
+            offer.getResourceId(), market.rate(), market.getRecentSalePricesRounded(), market.getRecentSaleQuantities()));
     }
 
     @Override
@@ -262,6 +270,10 @@ public class MayorTradeMenu extends AbstractContainerMenu {
         }
         if (id == BUTTON_CLAIM_OUTPUT) {
             claimOutput(player);
+            return true;
+        }
+        if (id == BUTTON_CANCEL_TRADE) {
+            cancelTrade(player);
             return true;
         }
         if (id >= 0 && id < offers.size()) {

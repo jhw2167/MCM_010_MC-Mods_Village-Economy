@@ -12,14 +12,14 @@ public class TradeEngine {
     /** Schedule a trade delivering the resource from another village to this one.
     * - diff > 0
 */
-    public static void scheduleIncomingTrade(Mayor village, String resourceId, int diff, ResourceLedger ledger) {
+    public static void incomingTrade(Mayor village, String resourceId, int diff, ResourceLedger ledger) {
         ledger.add(resourceId, diff);
     }
 
     /** Schedule a trade shipping the resource from this village to another.
     * - diff > 0, the negative is subtracted from the ledger to reflect the outgoing trade
   */
-    public static void scheduleOutgoingTrade(Mayor village, String resourceId, int diff, ResourceLedger ledger) {
+    public static void outgoingTrade(Mayor village, String resourceId, int diff, ResourceLedger ledger) {
         ledger.add(resourceId, -diff);
     }
 

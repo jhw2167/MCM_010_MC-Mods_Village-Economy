@@ -1,18 +1,14 @@
 package com.holybuckets.villageecon.core;
 
 import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.VillageEconConfig;
 import com.holybuckets.villageecon.config.VillageEconomyJsonConfig;
 import com.holybuckets.villageecon.config.model.EconomyResource;
 
 /**
- * Class: EconomyMath
- * Description: PLACEHOLDER. Stateless static functions implementing the economy equations
- * (see math.txt). No Minecraft imports so it can be unit tested with plain JUnit.
- *
- * Symbols: L level, Rho base production, C reserve currency, I interest, S supply,
- * B favoribility (0..2), D market rate, Q quota fractions, Z demand dampening, R growth reward.
+ * Helper functions and resources for mananging trades and the economy
  */
 public class EconomyMath {
 
@@ -20,6 +16,7 @@ public class EconomyMath {
     private static GeneralConfig CONFIG;
 
     private static EconomyMath INSTANCE;
+    private static float growthPool;
     private MarketState market;
     private ModConfig modConfig;
     private VillageEconomyJsonConfig eConfig;
@@ -41,8 +38,6 @@ public class EconomyMath {
 
     /**
      * Fraction of resource quota reached: q_j = s_j / (2 * rho_{j, L+1})
-     * @param supply s_j - current supply of the resource
-     * @param level L - current village level
      */
     public static float quotaFraction(int level, int supply,  EconomyResource resource) {
         if(level >= VillageEconConfig.MAX_VILLAGE_LEVEL ) return 0f;
@@ -51,16 +46,6 @@ public class EconomyMath {
         return Math.min(1f, supply / resourceQuota);
     }
 
-    /**
-     * Profit of a particular resource during a particular cycle:
-     * P_j = C*I + (1 - z*q_j)*(s*b*D)_j + floor(q_j)*r_j
-     * TODO: implement when MarketState provides real market rates
-     */
-    public static float profit(float currency, float interestRate, float quotaFraction,
-         int supply, float favoribility, float marketRate, float growthReward) {
-        //TODO
-        return 0f;
-    }
 
     /**
      * Marginal demand village i places on one more unit of resource j:
@@ -95,11 +80,38 @@ public class EconomyMath {
         return lostInterest + (float) gainedMarketValue + gainedQuotaBonus;
     }
 
+    public static void snapshotGrowthPool() {
+        growthPool = MarketState.totalCurrency() * ModConfig.getDefaults().growthFactor;
+        LoggerProject.logInfo(CLASS_ID + "001", "Growth pool snapshot: " + growthPool);
+    }
+
+    public static float getGrowthPool() {
+        return growthPool;
+    }
+
     public static float growthRewardPerResource() {
-        float totalCurrency = MarketState.totalCurrency();
-        float growthFactor = ModConfig.getDefaults().growthFactor;
-        int totalResourcesTraded = INSTANCE.market.getTotalResourceTrades();
-        if (totalResourcesTraded <= 0) return 0f;
-        return (totalCurrency * growthFactor) / totalResourcesTraded;
+        if (INSTANCE == null) return 0f;
+        int totalResources = INSTANCE.market.getTotalResources();
+        if (totalResources <= 0) return 0f;
+        return growthPool / totalResources;
+    }
+
+    public static boolean canDrawFromPool(float amount) {
+        return amount <= growthPool;
+    }
+
+    public static float drawFromPool(float amount) {
+        float drawn = Math.max(0f, Math.min(amount, growthPool));
+        growthPool -= drawn;
+        return drawn;
+    }
+
+    public static void addToPool(float amount) {
+        if (amount <= 0f) return;
+        growthPool += amount;
+    }
+
+    public static void clearGrowthPool() {
+        growthPool = 0f;
     }
 }

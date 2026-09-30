@@ -99,7 +99,7 @@ public class Mayor {
         this.personalityId = village.getPersonalityModifier().getId();
         this.biomeId = village.getBiomeModifier().getId();
         this.luxuryResourceIds = new ArrayList<>(village.getLuxuryResourceIds());
-        hydrateModifiers();
+        setModifiers();
 
         modConfig = ModConfig.getInstance();
         float startingReserve = modConfig.getStartingReserveCurrency(villageLevel);
@@ -118,9 +118,6 @@ public class Mayor {
     }
 
     private static final CycleModifier NO_CYCLE_MODIFIER = new CycleModifier(CycleModifier.NONE_ID);
-
-
-
     public CycleModifier cycleModifier() {
         if (currentCycleModifier != null) return currentCycleModifier;
         VillageEconomyJsonConfig c = config();
@@ -131,7 +128,7 @@ public class Mayor {
         return NO_CYCLE_MODIFIER;
     }
 
-    private void hydrateModifiers() {
+    private void setModifiers() {
         VillageEconomyJsonConfig c = config();
         if (c == null) return;
 
@@ -146,7 +143,6 @@ public class Mayor {
     //** Getters / Setters **//
 
     public MayorEntity getEntity() { return entity; }
-
 
 
     public boolean isEntityLoaded() { return entity != null && entity.isAlive(); }
@@ -181,11 +177,6 @@ public class Mayor {
     public Map<String, Float> getDemand() { return demand; }
 
     public BiasModifier getBiasModifier() { return biasModifier; }
-
-    public float getBias(EconomyResource resource) { return biasModifier.getBias(resource); }
-
-    public int getTarget(EconomyResource resource) { return biasModifier.getTarget(resource); }
-
 
     public int getAvailable(String resourceId) {
         return staticLedger.get(resourceId);
@@ -266,16 +257,6 @@ public class Mayor {
         return tradedResources;
     }
 
-    public Map<EconomyResource, Integer> getProduction() {
-        Map<EconomyResource, Integer> counts = new HashMap<>();
-        for (EconomyResource resource : tradedResources) {
-            String id = resource.getResourceId();
-            int produced = Math.round(resource.productionAt(villageLevel) * productionModifier(id));
-            counts.put(resource, produced);
-        }
-        return counts;
-    }
-
 
     //** Modifiers **//
 
@@ -311,12 +292,6 @@ public class Mayor {
     }
 
 
-    //** LEDGER REPORTING **//
-
-    /**
-     * Formats a ledger as an aligned block of resource counts followed by currency.
-     * Returned rather than logged directly so callers can label and group the output.
-     */
     public static String printLedger(ResourceLedger ledger)
     {
         if (ledger == null) return System.lineSeparator() + "    <no ledger>";
@@ -325,15 +300,12 @@ public class Mayor {
         Map<String, Integer> resources = ledger.getResources();
 
         if (resources.isEmpty()) {
-            sb.append(System.lineSeparator()).append(String.format("    %-32s %10s", "(no resources)", "-"));
+            sb.append("No Resources");
         } else {
             for (Map.Entry<String, Integer> entry : resources.entrySet())
-                sb.append(System.lineSeparator())
-                  .append(String.format("    %-32s %10d", entry.getKey(), entry.getValue()));
+                sb.append(entry.getKey() + ": " + entry.getValue() + ", ");
         }
-
-        sb.append(System.lineSeparator())
-          .append(String.format("    %-32s %10.2f", "currency", ledger.getCurrency()));
+        sb.append("\nCurrency: " + String.format("%.2f", ledger.getCurrency()));
         return sb.toString();
     }
 
@@ -345,7 +317,7 @@ public class Mayor {
      */
     public void tickProcess() {
         recalculateDemand();
-        submitTradeOffers();
+        submitTrades();
     }
 
     //Calculates marginal demand for each resource
@@ -376,7 +348,7 @@ public class Mayor {
     }
 
 
-    private void submitTradeOffers()
+    private void submitTrades()
     {
         ServerLevel level = getLevel();
         if (level == null) return;
@@ -395,7 +367,7 @@ public class Mayor {
 
             float D = MarketState.marketRate(id);
             float m = Math.abs(d);
-            float dReserve = rollReserveDemand(m, rollAgreeableness());
+            float dReserve = calcDemandReserve(m, tryAgreeableness());
 
             int quantity = 1;
 
@@ -415,17 +387,17 @@ public class Mayor {
         }
     }
 
-    private float rollAgreeableness() {
+    private float tryAgreeableness() {
         double gaussian = VillageManager.RANDOM.nextGaussian();
         double sigma = ModConfig.getBalmConfig().tradeConfigs.agreeablenessStdDev;
         double rolled = gaussian*sigma + personalityModifier.getAgreeableness();
         return (float) Math.max(0d, Math.min(1d, rolled));
     }
 
-    private float rollReserveDemand(float m, float a) {
+    private float calcDemandReserve(float m, float a) {
         double mean = m * (1.5d - a);
-        double sigma = m / 6d;
-        double rolled = VillageManager.RANDOM.nextGaussian() * sigma + mean;
+        double vari = m / 6d;
+        double rolled = VillageManager.RANDOM.nextGaussian() * vari + mean;
         return (float) Math.max(0d, rolled);
     }
 
@@ -443,7 +415,8 @@ public class Mayor {
         int cycleLength = Math.max(1, ModConfig.getDefaults().cycleLengthDays);
         float dailyRate = (interestRate()-1)*theoLedger.getCurrency() / cycleLength;
         theoLedger.addCurrency(dailyRate);
-        cachedNbt = serializeNBT();
+        //serialize
+        syncLedgers(entity);
 
         LoggerProject.logInfo("015005", getName() + printLedger(staticLedger) );
         LoggerProject.logInfo("015006", getName() + printLedger(theoLedger) );
@@ -464,33 +437,65 @@ public class Mayor {
      */
     public void cycleProcess()
     {
-        //0. Reconcile ledgers and schedule trades
+        //0. Consume this level's share of production before reconciling
+        for (EconomyResource resource : getActiveResources()) {
+            String id = resource.getResourceId();
+            int consumed = Math.round(resource.consumptionAt(villageLevel));
+            if (consumed <= 0) continue;
+
+            staticLedger.remove(id, consumed);
+            theoLedger.remove(id, consumed);
+        }
+
+        //1. Reconcile ledgers and schedule trades
         Map<String, Integer> diff = theoLedger.diff(staticLedger);
         for (Map.Entry<String, Integer> entry : diff.entrySet()) {
             if (entry.getValue() > 0)
-                TradeEngine.scheduleIncomingTrade(this, entry.getKey(), entry.getValue(), staticLedger);
+                TradeEngine.incomingTrade(this, entry.getKey(), entry.getValue(), staticLedger);
             else if (entry.getValue() < 0)
-                TradeEngine.scheduleOutgoingTrade(this, entry.getKey(), -entry.getValue(), staticLedger);
+                TradeEngine.outgoingTrade(this, entry.getKey(), -entry.getValue(), staticLedger);
         }
         //sync the currency
         staticLedger.setCurrency(theoLedger.getCurrency());
 
-        //1. Grant quota rewards: floored quota fractions only
-        boolean allQuotasMet = true;
+        //2. Grant quota rewards: floored quota fractions only
+        boolean metQ = true;
+        int quotasFailed=0; //counts any resources at 0 or lower
         for (EconomyResource resource : getActiveResources())
         {
             String id = resource.getResourceId();
             float q = EconomyMath.quotaFraction(villageLevel, staticLedger.get(id), resource);
-            if (q < 1f) { allQuotasMet = false; }
+            if (q < 1f) { metQ = false; quotasFailed++; }
+            if(q<=0f) quotasFailed++;
         }
 
-        if(allQuotasMet) {
-            float reward = EconomyMath.growthRewardPerResource()*tradedResources.size();
-            staticLedger.addCurrency(reward);
+        //3. Grant growth reward or penalty
+        float reward = EconomyMath.growthRewardPerResource();
+        if(metQ) {
+            staticLedger.addCurrency(EconomyMath.drawFromPool(reward * tradedResources.size()));
+        } else if(quotasFailed>0) {
+            float penalty = -reward*quotasFailed;
+            if(penalty > staticLedger.getCurrency())
+            {
+                if(villageLevel > 1) {
+                    villageLevel--;
+                    VillageEconomyChunk village = getVillage();
+                    if (village != null) village.setVillageLevel(villageLevel);
+                }
+                String msg = String.format("Village %s cannot afford quota penalty of %.2f, village level reduced to %d",
+                    villageChunkId, penalty, villageLevel);
+                LoggerProject.logWarning(CLASS_ID + "002", msg);
+                staticLedger.addCurrency(EconomyMath.drawFromPool(reward));
+
+            } else {
+                staticLedger.addCurrency(penalty);
+                EconomyMath.addToPool(-penalty);
+            }
+
         }
 
-        //2. Process level ups
-        if (allQuotasMet && villageLevel < VillageEconConfig.MAX_VILLAGE_LEVEL)
+        //4. Process level ups
+        if (metQ && villageLevel < VillageEconConfig.MAX_VILLAGE_LEVEL)
         {
             for (EconomyResource resource : getActiveResources()){
                 String id = resource.getResourceId();
@@ -503,28 +508,19 @@ public class Mayor {
             VillageEconomyChunk village = getVillage();
             if (village != null) village.setVillageLevel(villageLevel);
             LoggerProject.logInfo(CLASS_ID + "001", "Village " + villageChunkId + " leveled up to " + villageLevel);
+            EconomyMath.snapshotGrowthPool();
         }
 
-        //3. Consume this level's share of production before reconciling
-        for (EconomyResource resource : getActiveResources()) {
-            String id = resource.getResourceId();
-            int consumed = Math.round(resource.consumptionAt(villageLevel));
-            if (consumed <= 0) continue;
-
-            staticLedger.remove(id, consumed);
-            theoLedger.remove(id, consumed);
-        }
 
         //4. Rectify the theoLedger to the (post-trade) static ledger for the new cycle
         theoLedger.clear();
         theoLedger.deserializeNBT(staticLedger.serializeNBT());
 
         //5. Draw the cycle modifier for the next cycle
-        this.currentCycleModifier = drawCycleModifier();
+        this.currentCycleModifier = pickCycleModifier();
 
         //6. Refresh the snapshot source so the daily push captures this cycle's changes
         cachedNbt = serializeNBT();
-
 
         LoggerProject.logInfo("015005", getName() + printLedger(staticLedger));
         LoggerProject.logInfo("015006", getName() + printLedger(theoLedger));
@@ -544,9 +540,11 @@ public class Mayor {
             staticLedger.add(resource.getResourceId(), produced);
             tradedResources.add(resource);
         }
+        //snapshot growthpool on startup
+        EconomyMath.snapshotGrowthPool();
     }
 
-    private CycleModifier drawCycleModifier()
+    private CycleModifier pickCycleModifier()
     {
         var pool = ModConfig.getInstance().getCycleModifiers();
         int totalWeight = pool.stream().mapToInt(CycleModifier::getWeight).sum();
@@ -604,7 +602,7 @@ public class Mayor {
                 luxuryResourceIds.add(luxuryId.trim());
         }
 
-        hydrateModifiers();
+        setModifiers();
 
         staticLedger.deserializeNBT(tag.getCompound("staticLedger"));
         theoLedger.deserializeNBT(tag.getCompound("theoLedger"));
@@ -617,7 +615,7 @@ public class Mayor {
     }
 
 
-    public void syncStaticLedgerToEntity(MayorEntity mayorEntity) {
+    public void syncStaticLedger(MayorEntity mayorEntity) {
         if (mayorEntity == null) return;
         if (cachedNbt == null) cachedNbt = serializeNBT();
 
@@ -625,7 +623,8 @@ public class Mayor {
         mayorEntity.setPendingMayorData(cachedNbt);
     }
 
-    public void syncLedgersToEntity(MayorEntity mayorEntity) {
+    public void syncLedgers(MayorEntity mayorEntity) {
+        cachedNbt=serializeNBT();
         if (mayorEntity == null) return;
         mayorEntity.setPendingMayorData(cachedNbt);
     }

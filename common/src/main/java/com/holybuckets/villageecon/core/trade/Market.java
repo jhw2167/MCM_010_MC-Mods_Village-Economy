@@ -3,6 +3,7 @@ package com.holybuckets.villageecon.core.trade;
 import com.holybuckets.villageecon.LoggerProject;
 import com.holybuckets.villageecon.config.ModConfig;
 import com.holybuckets.villageecon.config.model.EconomyResource;
+import com.holybuckets.villageecon.core.EconomyMath;
 import com.holybuckets.villageecon.core.VillageManager;
 import com.holybuckets.villageecon.core.model.Mayor;
 import net.minecraft.world.item.Item;
@@ -43,6 +44,7 @@ public class Market {
     private final Queue<Post> buyPosts = new ArrayDeque<>();
     private final List<Post> sellPosts = new ArrayList<>();
     private final ArrayDeque<Float> recentSalePrices = new ArrayDeque<>();
+    private final ArrayDeque<Integer> recentSaleQuantities = new ArrayDeque<>();
     private final Set<Mayor> dummyTradesToday = new HashSet<>();
 
     public Market(Item item) {
@@ -73,6 +75,8 @@ public class Market {
 
     public List<Float> getRecentSalePrices() { return new ArrayList<>(recentSalePrices); }
 
+    public List<Integer> getRecentSaleQuantities() { return new ArrayList<>(recentSaleQuantities); }
+
     public List<Integer> getRecentSalePricesRounded() {
         List<Integer> rounded = new ArrayList<>(recentSalePrices.size());
         for (Float price : recentSalePrices)
@@ -89,12 +93,16 @@ public class Market {
 
         marketRate.seed(rate);
         recentSalePrices.clear();
+        recentSaleQuantities.clear();
         for (int i = 0; i < samples; i++) {
             marketRate.addSample(rate, 1);
             recentSalePrices.addLast(rate);
+            recentSaleQuantities.addLast(1);
         }
-        while (recentSalePrices.size() > SALE_HISTORY_SIZE)
+        while (recentSalePrices.size() > SALE_HISTORY_SIZE) {
             recentSalePrices.removeFirst();
+            recentSaleQuantities.removeFirst();
+        }
     }
 
     public void clearDummyTrades() {
@@ -105,8 +113,11 @@ public class Market {
         if (sale == null) return;
         marketRate.addSample(sale);
         recentSalePrices.addLast(sale.getSalePrice());
-        while (recentSalePrices.size() > SALE_HISTORY_SIZE)
+        recentSaleQuantities.addLast(sale.getSaleQuantity());
+        while (recentSalePrices.size() > SALE_HISTORY_SIZE) {
             recentSalePrices.removeFirst();
+            recentSaleQuantities.removeFirst();
+        }
     }
 
 
@@ -141,10 +152,12 @@ public class Market {
         } else if(sellPosts.isEmpty()) {
             int rand = RANDOM.nextInt(buyPosts.size());
             sellToDummy( buyPosts.stream().skip(rand).findFirst().orElse(null), bazaar);
+            buyPosts.clear();
             return;
         } else if(buyPosts.isEmpty()) {
             int rand = RANDOM.nextInt(sellPosts.size());
             buyFromDummy(sellPosts.get(rand), bazaar);
+            sellPosts.clear();
             return;
         }
         List<Post> sortedBuyPosts = new ArrayList<>(buyPosts);
@@ -201,6 +214,8 @@ public class Market {
         Sale sale = new Sale(VillageManager.INDEPENDENT_MAYOR, buy.getVillage(),
             price, DUMMY_QUANTITY, saleTime(buy), item, resourceId);
 
+        EconomyMath.addToPool(price * DUMMY_QUANTITY);
+
         buy.getLedger().logTrade(sale, true);
         bazaar.recordSale(sale);
         TransactionLog.recordSale(buy.getVillage().getLevel(), sale);
@@ -217,6 +232,15 @@ public class Market {
         if (!dummyTradesToday.add(sell.getVillage())) return;
 
         float price = dummyPrice(sell.getDemandReserve());
+        float cost = price * DUMMY_QUANTITY;
+        if (!EconomyMath.canDrawFromPool(cost)) {
+            sellPosts.remove(sell);
+            LoggerProject.logDebug("013006", "Market: " + resourceId
+                + ": contractor cannot afford " + cost + " from a pool of " + EconomyMath.getGrowthPool());
+            return;
+        }
+        EconomyMath.drawFromPool(cost);
+
         Sale sale = new Sale(sell.getVillage(), VillageManager.INDEPENDENT_MAYOR,
             price, DUMMY_QUANTITY, saleTime(sell), item, resourceId);
 

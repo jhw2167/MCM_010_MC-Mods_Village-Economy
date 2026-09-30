@@ -61,7 +61,7 @@ public class MayorSimulator {
         try {
             beta = LeastSquares.solve(x, y);
         } catch (Exception e) {
-            LoggerProject.logWarning(CLASS_ID + "001", "Could not fit trade surface for "
+            LoggerProject.logWarning("030001", "Could not fit trade surface for "
                 + enterpriser.getName() + ". " + e.getMessage());
             return;
         }
@@ -119,7 +119,6 @@ public class MayorSimulator {
             modifier.addBias(resource, Math.max(MIN_BIAS, Math.min(MAX_BIAS, favor)));
         }
 
-        LoggerProject.logDebug(CLASS_ID + "002", "Trade bias for " + enterpriser.getName()
-            + ": " + modifier);
+        //LoggerProject.logDebug("030002", "Trade bias for " + enterpriser.getName() + ": " + modifier);
     }
 }

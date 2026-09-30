@@ -29,9 +29,10 @@ public class MayorMenuProvider implements BalmMenuProvider {
     @Override
     public AbstractContainerMenu createMenu(int syncId, Inventory inventory, Player player) {
         float reserve = (mayor != null) ? mayor.getStaticLedger().getCurrency() : 0f;
+        float projected = (mayor != null) ? mayor.getTheoLedger().getCurrency() : 0f;
         String name = (mayor != null) ? mayor.getName() : "";
         float delta = (mayor != null) ? mayor.currencyDiff() : 0f;
-        return new MayorTradeMenu(syncId, inventory, mayor, MayorTradeMenu.buildOffers(mayor), reserve, name, delta);
+        return new MayorTradeMenu(syncId, inventory, mayor, MayorTradeMenu.buildOffers(mayor), reserve, projected, name, delta);
     }
 
     @Override
@@ -40,6 +41,7 @@ public class MayorMenuProvider implements BalmMenuProvider {
         MayorTradeMenu.writeOffers(buf, offers);
 
         buf.writeFloat((mayor != null) ? mayor.getStaticLedger().getCurrency() : 0f);
+        buf.writeFloat((mayor != null) ? mayor.getTheoLedger().getCurrency() : 0f);
         buf.writeUtf((mayor != null) ? mayor.getName() : "");
         buf.writeFloat((mayor != null) ? mayor.currencyDiff() : 0f);
     }

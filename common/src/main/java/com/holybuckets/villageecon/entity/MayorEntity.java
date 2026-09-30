@@ -13,8 +13,6 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
-import javax.annotation.Nullable;
-
 /**
  * Mayor villager entity in world, owned by Mayor object
  */
@@ -74,13 +72,10 @@ public class MayorEntity extends Villager {
 
     @Override
     public void remove(RemovalReason reason) {
-        //An unloading entity is about to be written to chunk storage, so hand it the
-        //current static ledger first. Deaths go through mayorEntityRemoved instead.
-        if (!this.level().isClientSide() && UNLOADS.contains(reason) && villageChunkId != null) {
+       if (!this.level().isClientSide() && villageChunkId != null) {
             Mayor mayor = Mayor.getMayor(this.level(), villageChunkId);
-            if (mayor != null) mayor.syncStaticLedgerToEntity(this);
+            if (mayor != null) mayor.syncStaticLedger(this);
         }
-
         VillageManager.mayorEntityRemoved(this.level(), villageChunkId, reason, this);
         super.remove(reason);
     }
@@ -134,9 +129,10 @@ public class MayorEntity extends Villager {
         super.addAdditionalSaveData(tag);
         if (villageChunkId != null) tag.putString(NBT_VILLAGE_CHUNK_ID, villageChunkId);
 
-        //Write only the once daily snapshot. Serialising the mayor's live ledgers here
-        //would bake in transactions that the journal is still holding, and replaying the
-        //journal on the next world load would then count them twice.
+        if(!this.level().isClientSide() && villageChunkId != null) {
+            Mayor mayor = Mayor.getMayor(this.level(), villageChunkId);
+            if (mayor != null) mayor.syncStaticLedger(this);
+        }
         if (pendingMayorData != null) tag.put(NBT_MAYOR, pendingMayorData);
     }
 

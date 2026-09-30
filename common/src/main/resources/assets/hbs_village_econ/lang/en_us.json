@@ -4,5 +4,9 @@
   "screen.hbs_village_econ.inventory": "Trade",
   "screen.hbs_village_econ.graph": "Graph",
   "screen.hbs_village_econ.village_reserve": "Reserve: %s",
-  "item.hbs_village_econ.dot": "Dot"
+  "item.hbs_village_econ.dot": "Dot",
+  "screen.hbs_village_econ.sale_price": "Price: %s",
+  "screen.hbs_village_econ.sale_quantity": "Quantity: %s",
+  "screen.hbs_village_econ.stored": "Stored: %s",
+  "screen.hbs_village_econ.projected": "Projected: %s"
 }

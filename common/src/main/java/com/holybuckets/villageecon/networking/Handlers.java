@@ -22,7 +22,7 @@ public class Handlers {
     public static void handleMayorOffersSync(Player p, MayorOffersSync m) {
         if (p == null || m == null) return;
         if (p.containerMenu instanceof com.holybuckets.villageecon.menu.MayorTradeMenu menu)
-            menu.setOffers(m.getOffers(), m.getReserveCurrency(), m.getVillageName(), m.getCurrencyDelta());
+            menu.setOffers(m.getOffers(), m.getReserveCurrency(), m.getProjectedCurrency(), m.getVillageName(), m.getCurrencyDelta());
     }
 
 
