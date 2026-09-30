@@ -17,8 +17,10 @@ public class MayorSimulator {
 
     private static final int CYCLES = 2;
     private static final int SAMPLES = 40;
-    private static final int MAX_SAMPLES = 1000;
+    private static final int MAX_SAMPLES = 10000;
     private static final float BIAS_STRENGTH = 0.5f;
+    private static final float MIN_BIAS = 0.25f;
+    private static final float MAX_BIAS = 2.0f;
 
     private static final int[] FIB = { -21, -13, -8, -5, -3, -2, -1, 0, 1, 2, 3, 5, 8, 13, 21 };
 
@@ -109,14 +111,12 @@ public class MayorSimulator {
         {
             EconomyResource resource = resources.get(r);
             double slope = beta[1 + 2 * r];
-            double curve = beta[2 + 2 * r];
 
             float rate = Math.max(0.01f, MarketState.marketRate(resource.getResourceId()));
-            float favor = (float) (1d + BIAS_STRENGTH * slope / rate);
-            modifier.addBias(resource, Math.max(0f, Math.min(2f, favor)));
+            double profitRatio = slope / rate;
 
-            int optimum = (curve < 0d) ? (int) Math.round(-slope / (2d * curve)) : 0;
-            modifier.addTarget(resource, optimum);
+            float favor = (float) Math.exp(BIAS_STRENGTH * profitRatio);
+            modifier.addBias(resource, Math.max(MIN_BIAS, Math.min(MAX_BIAS, favor)));
         }
 
         LoggerProject.logDebug(CLASS_ID + "002", "Trade bias for " + enterpriser.getName()

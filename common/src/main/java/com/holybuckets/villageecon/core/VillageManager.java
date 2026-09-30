@@ -313,6 +313,7 @@ public class VillageManager {
             initialSyncDone = true;
         }
 
+        if(mayors.isEmpty()) return;
         attemptTransactionReplay();
         simulationProcess();
 
@@ -434,17 +435,13 @@ public class VillageManager {
     private Iterator<Mayor> enterpriser;
     private void simulationProcess()
     {
+        if(mayors.isEmpty()) return;
+        if(simsCount >= SIMS_PER_CYCLE) return;
 
-        if(enterpriser==null) {
-            simsCount++;
-            enterpriser = mayors.values().iterator();
-            return;
-        }
 
-        if(!enterpriser.hasNext()) {
-            if(simsCount >= SIMS_PER_CYCLE) return;
+        if(enterpriser==null || !enterpriser.hasNext()) {
             simsCount++;
-            enterpriser = mayors.values().iterator();
+            enterpriser = mayors.values().stream().toList().iterator();
             return;
         }
 

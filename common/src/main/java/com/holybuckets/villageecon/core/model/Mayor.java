@@ -284,26 +284,26 @@ public class Mayor {
         return (resource != null) ? resource.getType() : null;
     }
 
+    /** Max favoribility at 2.0 **/
     public float favoribility(String resourceId) {
         ResourceType type = resourceType(resourceId);
         float b = personalityModifier.getDemandModifier(resourceId, type)
-            + biomeModifier.getDemandModifier(resourceId, type)
-            + cycleModifier().getDemandModifier(resourceId)
-            - 2f;
+            * biomeModifier.getDemandModifier(resourceId, type)
+            * cycleModifier().getDemandModifier(resourceId);
         return Math.max(0f, Math.min(2f, b));
     }
 
     public float productionModifier(String resourceId) {
         ResourceType type = resourceType(resourceId);
         float m = personalityModifier.getProductionModifier(resourceId, type)
-            + biomeModifier.getProductionModifier(resourceId, type)
-            + cycleModifier().getProductionModifier(resourceId)
-            - 2f;
+            * biomeModifier.getProductionModifier(resourceId, type)
+            * cycleModifier().getProductionModifier(resourceId);
+
         return Math.max(0f, m);
     }
 
     public float interestRate() {
-        return ModConfig.getDefaults().globalInterestRate * personalityModifier.getInterestModifier();
+        return personalityModifier.getInterestModifier();
     }
 
     public float playerPrice(String resourceId) {
@@ -369,7 +369,8 @@ public class Mayor {
             if(sell >= 0 && sell > d) tradeDemand = -sell;
 
             //apply bias modifier
-            tradeDemand *= biasModifier.getBias(resource);
+            float bias = biasModifier.getBias(resource);
+            tradeDemand *= (bias>0f) ? bias : -bias;
             demand.put(id, tradeDemand);
         }
     }
@@ -440,7 +441,7 @@ public class Mayor {
         }
 
         int cycleLength = Math.max(1, ModConfig.getDefaults().cycleLengthDays);
-        float dailyRate = interestRate()*theoLedger.getCurrency() / cycleLength;
+        float dailyRate = (interestRate()-1)*theoLedger.getCurrency() / cycleLength;
         theoLedger.addCurrency(dailyRate);
         cachedNbt = serializeNBT();
 
@@ -655,7 +656,7 @@ public class Mayor {
         int cycles = adjustedProduction.length;
         for (int i = 0; i < cycles; i++) {
             int adj = adjustedProduction[i].getInt(EconomyResource.CURRENCY);
-            principal += (principal+adj) * rate;
+            principal = (principal+adj)*rate;
         }
         return Math.round(principal);
     }
@@ -671,8 +672,8 @@ public class Mayor {
             int consumed = Math.round(r.consumptionAt(villageLevel));
             int traded = adjustedProduction[i].getInt(r.getResourceId());
             current += produced - consumed + traded;
-            total += current * price;
         }
+        total += current * price;
         return Math.round(total);
     }
 
